@@ -1,18 +1,16 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
+import { databaseUrlCandidates } from "@/lib/database-url";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
 };
 
 function createPrismaClient() {
-  const connectionString = process.env.DATABASE_URL;
+  const selected = databaseUrlCandidates()[0];
+  if (!selected) throw new Error("DATABASE_URL is not set");
 
-  if (!connectionString) {
-    throw new Error("DATABASE_URL is not set");
-  }
-
-  const adapter = new PrismaPg({ connectionString });
+  const adapter = new PrismaPg({ connectionString: selected.url });
   return new PrismaClient({ adapter });
 }
 
