@@ -1,7 +1,5 @@
-import { NextResponse } from "next/server";
+import { connection, NextResponse } from "next/server";
 import pg from "pg";
-
-export const runtime = "nodejs";
 
 function safeMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "reset failed";
@@ -9,6 +7,7 @@ function safeMessage(error: unknown) {
 }
 
 export async function POST(request: Request) {
+  await connection();
   const expected = process.env.RESET_TOKEN;
   const provided = request.headers.get("x-reset-token");
   if (!expected || provided !== expected) return new NextResponse(null, { status: 404 });
