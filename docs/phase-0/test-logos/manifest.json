@@ -1,0 +1,74 @@
+[
+  {
+    "id": "monochrome",
+    "file": "01-monochrome.png",
+    "vector": "01-monochrome.svg",
+    "category": "monochrome",
+    "width": 1000,
+    "height": 1000,
+    "mimeType": "image/png",
+    "hasTransparency": false,
+    "supported": true,
+    "expect": "Editable paths and a text candidate for NORTH. Original stays locked."
+  },
+  {
+    "id": "multicolor",
+    "file": "02-multicolor.png",
+    "vector": "02-multicolor.svg",
+    "category": "multicolor",
+    "width": 1000,
+    "height": 1000,
+    "mimeType": "image/png",
+    "hasTransparency": false,
+    "supported": true,
+    "expect": "Separate flat-color paths and a text candidate for PINE. Original stays locked."
+  },
+  {
+    "id": "text-heavy",
+    "file": "03-text-heavy.png",
+    "vector": "03-text-heavy.svg",
+    "category": "text-heavy",
+    "width": 1600,
+    "height": 800,
+    "mimeType": "image/png",
+    "hasTransparency": false,
+    "supported": true,
+    "expect": "OCR candidates for the main lines. Must not drop the original."
+  },
+  {
+    "id": "transparent",
+    "file": "04-transparent.png",
+    "vector": "04-transparent.svg",
+    "category": "transparent",
+    "width": 1000,
+    "height": 1000,
+    "mimeType": "image/png",
+    "hasTransparency": true,
+    "supported": true,
+    "expect": "Preserve the alpha channel. Do not add a white background."
+  },
+  {
+    "id": "gradient",
+    "file": "05-gradient.png",
+    "vector": "05-gradient.svg",
+    "category": "gradient",
+    "width": 1000,
+    "height": 1000,
+    "mimeType": "image/png",
+    "hasTransparency": false,
+    "supported": false,
+    "expect": "No crash. Exact gradient recovery is not required. Original stays locked."
+  },
+  {
+    "id": "low-resolution",
+    "file": "06-low-resolution.jpg",
+    "vector": "02-multicolor.svg",
+    "category": "low-resolution",
+    "width": 96,
+    "height": 96,
+    "mimeType": "image/jpeg",
+    "hasTransparency": false,
+    "supported": false,
+    "expect": "No crash. A coarse draft or a failed draft is acceptable if the original remains."
+  }
+]

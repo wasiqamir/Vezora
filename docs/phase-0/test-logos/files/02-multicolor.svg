@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <rect width="1000" height="1000" fill="#ffffff"/>
+  <circle cx="220" cy="430" r="130" fill="#1F7A4D"/>
+  <circle cx="280" cy="360" r="36" fill="#F2C14E"/>
+  <rect x="140" y="500" width="160" height="36" fill="#E07A3D"/>
+  <text x="430" y="470" font-family="Segoe UI, Arial, sans-serif" font-size="120" font-weight="700" fill="#1B3A4B">PINE</text>
+  <text x="436" y="536" font-family="Segoe UI, Arial, sans-serif" font-size="36" fill="#E07A3D">GOODS</text>
+</svg>

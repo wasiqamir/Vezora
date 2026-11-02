@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <rect width="1000" height="1000" fill="#ffffff"/>
+  <circle cx="250" cy="500" r="140" fill="#111111"/>
+  <text x="440" y="490" font-family="Segoe UI, Arial, sans-serif" font-size="92" font-weight="700" fill="#111111">NORTH</text>
+  <text x="446" y="548" font-family="Segoe UI, Arial, sans-serif" font-size="28" fill="#111111">STUDIO</text>
+</svg>

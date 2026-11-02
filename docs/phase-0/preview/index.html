@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Logo Creation Tool — Phase 0 preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Fraunces:opsz,wght@9..144,600&family=Inter:wght@500;700&family=Libre+Baskerville&family=Montserrat:wght@600&family=Outfit:wght@400;500;600;700&family=Playfair+Display:wght@600&family=Poppins:wght@600&family=Source+Sans+3:wght@500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #1c2421;
+      --muted: #5e6a66;
+      --paper: #efeae1;
+      --line: #ddd6ca;
+      --green: #1f7a4d;
+      --rail: #1c2421;
+      --board-w: 1000px;
+      --board-h: 1000px;
+      --zoom: 0.45;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font-family: Outfit, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+    }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    .app { display: grid; grid-template-columns: 220px 1fr; height: 100%; }
+    .rail {
+      background: var(--rail);
+      color: #f4f0e8;
+      padding: 22px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      min-height: 0;
+    }
+    .brand { margin: 0; font-size: 18px; letter-spacing: -0.03em; }
+    .phase { margin: 4px 0 0; color: #c8c2b6; font-size: 13px; }
+    .rail nav { display: flex; flex-direction: column; gap: 4px; overflow: auto; }
+    .rail button, .text-btn {
+      background: transparent;
+      border: 0;
+      text-align: left;
+      padding: 8px 10px;
+      border-radius: 8px;
+      color: inherit;
+      white-space: nowrap;
+    }
+    .rail button.is-on, .rail button:hover { background: #f4f0e8; color: var(--ink); }
+    .rail-note { margin-top: auto; color: #c8c2b6; font-size: 12px; line-height: 1.45; }
+    .stage { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+    .banner {
+      padding: 8px 18px;
+      background: #e7f2eb;
+      color: #174832;
+      font-size: 13px;
+      border-bottom: 1px solid #cfe0d4;
+    }
+    .stage-scroll { flex: 1; min-height: 0; overflow: auto; }
+    .screen { display: none; min-height: 100%; }
+    .screen.is-active { display: block; height: 100%; }
+    .page { padding: 28px 32px 48px; max-width: 1080px; }
+    h1 { font-size: 32px; line-height: 1.1; letter-spacing: -0.04em; margin: 0 0 8px; }
+    h2 { font-size: 15px; margin: 0 0 10px; }
+    .lede { max-width: 62ch; color: var(--muted); margin: 0 0 22px; }
+    .split { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 18px; }
+    .panel { background: white; border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+    .people, .quiet, .checks { margin: 0; padding-left: 18px; }
+    .people li, .quiet li, .checks li { margin: 6px 0; }
+    .presets { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+    .preset {
+      border: 1px solid var(--line);
+      background: white;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      border-radius: 8px;
+    }
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+    .chip { border: 1px solid var(--line); background: white; border-radius: 999px; padding: 6px 10px; font-size: 13px; }
+    .device { min-height: 100%; background: white; display: flex; flex-direction: column; }
+    .topbar, .editor-top, .editor-bottom {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .editor-bottom { border-bottom: 0; border-top: 1px solid var(--line); }
+    .spacer { flex: 1; }
+    .primary, .ghost, .danger {
+      border-radius: 8px;
+      padding: 8px 12px;
+      border: 1px solid var(--ink);
+      background: var(--ink);
+      color: white;
+    }
+    .ghost { background: white; color: var(--ink); border-color: var(--line); }
+    .danger { background: white; color: #8c3a2f; border-color: #e4c7c2; }
+    .search, .name-input, .field input, .rename-input {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: white;
+    }
+    .name-input { font-weight: 650; min-width: 180px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; padding: 18px; }
+    .card { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: white; }
+    .card-open { display: block; width: 100%; border: 0; background: white; text-align: left; padding: 0; }
+    .thumb { height: 150px; background: #f7f4ee; display: grid; place-items: center; }
+    .thumb img { max-width: 86%; max-height: 120px; object-fit: contain; }
+    .card-copy { padding: 12px; }
+    .card-name { display: block; font-weight: 650; }
+    .card-meta, .muted { color: var(--muted); font-size: 13px; }
+    .card-actions, .filters { display: flex; gap: 6px; padding: 0 12px 12px; }
+    .card-actions button, .filters button, .tool, .layer-row button, .mini {
+      border: 0;
+      background: #f4f0e8;
+      border-radius: 6px;
+      padding: 6px 8px;
+    }
+    .filters { padding: 0 18px; }
+    .filters button.is-on, .seg button.is-on, .tool.is-on { background: var(--ink); color: white; }
+    .empty { padding: 28px 18px; color: var(--muted); }
+    .mark-svg { width: 100%; height: 92px; }
+    .editor-shell { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+    .editor-main { display: grid; grid-template-columns: 92px minmax(0, 1fr) 250px; min-height: 0; height: 100%; }
+    .tools, .props { border-right: 1px solid var(--line); padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+    .props { border-right: 0; border-left: 1px solid var(--line); overflow: auto; }
+    .tool { text-align: left; }
+    .canvas-well { background: #e4dfd4; display: grid; place-items: center; overflow: auto; min-height: 0; }
+    .board-fit { width: calc(var(--board-w) * var(--zoom)); height: calc(var(--board-h) * var(--zoom)); }
+    .board {
+      width: var(--board-w);
+      height: var(--board-h);
+      transform: scale(var(--zoom));
+      transform-origin: top left;
+      position: relative;
+      background: white;
+      border: 1px solid #d9d3c7;
+    }
+    .board.mode-image #object-layer { display: none; }
+    .board.mode-objects #board-image { display: none; }
+    #board-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; }
+    .piece { position: absolute; user-select: none; touch-action: none; }
+    .piece-text { line-height: 1; white-space: nowrap; cursor: move; }
+    .piece-shape { cursor: move; }
+    .piece.is-hidden { visibility: hidden; }
+    .piece.is-selected { outline: 2px solid var(--green); outline-offset: 4px; }
+    .board.is-checker {
+      background-color: #fff;
+      background-image:
+        linear-gradient(45deg, #ddd 25%, transparent 25%),
+        linear-gradient(-45deg, #ddd 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #ddd 75%),
+        linear-gradient(-45deg, transparent 75%, #ddd 75%);
+      background-size: 32px 32px;
+      background-position: 0 0, 0 16px, 16px -16px, -16px 0;
+    }
+    .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; margin-bottom: 8px; }
+    .field input, .field select { width: 100%; }
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .layer-row { display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 4px; align-items: center; padding: 4px 0; }
+    .layer-row.is-selected .layer-name { background: #e7f2eb; }
+    .layer-name { text-align: left; }
+    .status { margin-left: 8px; color: var(--muted); font-size: 13px; }
+    .auth-wrap, .hero { min-height: 100%; display: grid; place-items: center; padding: 32px; }
+    .auth, .hero-card { width: min(440px, 100%); }
+    .hero-card { width: min(720px, 100%); }
+    .auth h1, .hero-card h1 { font-size: 36px; }
+    .error { color: #8c3a2f; font-size: 14px; }
+    .dialog-back { position: relative; }
+    #export-dialog {
+      position: fixed;
+      z-index: 20;
+      top: 64px;
+      right: 24px;
+      width: min(420px, calc(100% - 32px));
+      max-height: calc(100vh - 88px);
+      overflow: auto;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .seg { display: flex; gap: 6px; }
+    .seg button { border: 1px solid var(--line); background: white; border-radius: 8px; padding: 6px 10px; }
+    #export-frame { margin: 12px 0; border-radius: 12px; min-height: 180px; display: grid; place-items: center; padding: 12px; }
+    #export-frame.light { background: white; border: 1px solid var(--line); }
+    #export-frame.dark { background: #111111; }
+    #export-frame.checker {
+      background-color: #fff;
+      background-image:
+        linear-gradient(45deg, #ddd 25%, transparent 25%),
+        linear-gradient(-45deg, #ddd 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #ddd 75%),
+        linear-gradient(-45deg, transparent 75%, #ddd 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+    }
+    #export-canvas { max-width: 100%; height: auto; }
+    .compare { display: grid; grid-template-columns: 1.4fr 0.8fr; gap: 16px; padding: 18px; }
+    .pane { background: #f7f4ee; border: 1px solid var(--line); border-radius: 12px; min-height: 360px; display: grid; place-items: center; position: relative; }
+    .pane img, .pane svg { width: min(100%, 640px); height: auto; }
+    .overlay-svg { position: absolute; width: min(100%, 640px); opacity: 0.45; }
+    .checker-box {
+      background-color: #fff;
+      background-image:
+        linear-gradient(45deg, #ddd 25%, transparent 25%),
+        linear-gradient(-45deg, #ddd 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #ddd 75%),
+        linear-gradient(-45deg, transparent 75%, #ddd 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+    }
+    .cases { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .case img { width: 100%; height: 180px; object-fit: contain; background: white; }
+    .case img.tiny { width: 96px; height: 96px; }
+    .case img.pixel { width: 220px; height: 220px; image-rendering: pixelated; object-fit: contain; }
+    .confirm-delete { display: flex; gap: 6px; padding: 0 12px 12px; }
+    @media (max-width: 1100px) {
+      .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+      .rail { flex-direction: row; align-items: center; gap: 8px; padding: 8px 12px; overflow: auto; }
+      .rail nav { flex-direction: row; }
+      .rail-note, .phase { display: none; }
+      .editor-top, .editor-bottom { flex-wrap: wrap; }
+      .editor-main { grid-template-columns: 1fr; grid-template-rows: auto minmax(280px, 1fr) auto; }
+      .tools { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); }
+      .props { border-left: 0; border-top: 1px solid var(--line); max-height: 220px; }
+      .split, .compare, .cases { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <div>
+        <p class="brand">Logo tool</p>
+        <p class="phase">Phase 0 wireframe</p>
+      </div>
+      <nav>
+        <button type="button" data-go="scope">Scope</button>
+        <button type="button" data-go="landing">Landing</button>
+        <button type="button" data-go="signin">Sign in</button>
+        <button type="button" data-go="dashboard">Dashboard</button>
+        <button type="button" data-go="templates">Templates</button>
+        <button type="button" data-go="editor" class="is-on">Editor</button>
+        <button type="button" data-go="export">Export</button>
+        <button type="button" data-go="reconstruct">Reconstruct</button>
+        <button type="button" data-go="tests">Test logos</button>
+      </nav>
+      <p class="rail-note">This page only changes what you see here. Accounts, the database, and real project save are later phases.</p>
+    </aside>
+    <div class="stage">
+      <div class="banner">Phase 0 preview. You can arrange a logo and download it. Nothing is stored after a refresh.</div>
+      <div class="stage-scroll">
+        <section class="screen" id="scope">
+          <div class="page">
+            <h1>First release scope</h1>
+            <p class="lede">A single person designs a logo, saves the editable project, reopens it, and exports SVG and PNG. A simple PNG or JPG can become a draft they correct by hand. Recovery from a photo is an approximation.</p>
+            <div class="split">
+              <div class="panel">
+                <h2>Who it is for</h2>
+                <ul class="people">
+                  <li>Startup founders who need a wordmark the same day</li>
+                  <li>Freelancers customizing a template for a client</li>
+                  <li>Small businesses that need a name, an icon, and a PNG</li>
+                  <li>Branding teams starting a draft someone can reopen</li>
+                </ul>
+              </div>
+              <div class="panel">
+                <h2>Not in v1</h2>
+                <ul class="quiet">
+                  <li>Billing, teams, and sharing</li>
+                  <li>Mobile canvas editing</li>
+                  <li>PDF, EPS, or extra PNG sizes beyond 1× and 2×</li>
+                  <li>Uploaded fonts and background removal</li>
+                </ul>
+              </div>
+            </div>
+            <div class="panel" style="margin-top:18px">
+              <h2>Artboard presets</h2>
+              <div class="presets">
+                <div class="preset" style="width:120px;height:120px">Square<br>1000×1000</div>
+                <div class="preset" style="width:72px;height:72px">Icon<br>512</div>
+                <div class="preset" style="width:160px;height:80px">Horizontal<br>1600×800</div>
+                <div class="preset" style="width:64px;height:112px">Vertical<br>800×1400</div>
+              </div>
+            </div>
+            <div class="panel" style="margin-top:18px">
+              <h2>Export</h2>
+              <div class="chips">
+                <span class="chip">SVG</span>
+                <span class="chip">PNG 1×</span>
+                <span class="chip">PNG 2×</span>
+                <span class="chip">Transparent background</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" id="landing">
+          <div class="device">
+            <div class="topbar"><strong>Logo tool</strong><span class="spacer"></span><button class="ghost" type="button" data-go="signin">Sign in</button></div>
+            <div class="hero">
+              <div class="hero-card">
+                <h1>Design a logo you can reopen and edit.</h1>
+                <p class="lede">Export SVG and PNG. Upload a simple image later to start a draft. A PNG does not contain the original layers or fonts.</p>
+                <button class="primary" type="button" data-go="signin">Start a logo</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" id="signin">
+          <div class="auth-wrap">
+            <form class="auth" id="signin-form">
+              <h1>Sign in</h1>
+              <p class="muted">Preview only. Any email and password continue to the dashboard. This does not create an account.</p>
+              <label class="field">Email <input id="email" type="email" autocomplete="off"></label>
+              <label class="field">Password <input id="password" type="password" autocomplete="off"></label>
+              <p class="error" id="signin-error" hidden>Enter an email and password.</p>
+              <button class="primary" type="submit">Sign in</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="screen" id="dashboard">
+          <div class="device">
+            <div class="topbar">
+              <strong>Projects</strong>
+              <input class="search" id="project-search" type="search" placeholder="Search projects">
+              <span class="spacer"></span>
+              <button class="ghost" type="button" data-go="templates">Templates</button>
+              <button class="primary" type="button" id="new-logo">New logo</button>
+              <button class="ghost" type="button" data-go="signin">Sign out</button>
+            </div>
+            <div class="grid" id="project-grid"></div>
+            <p class="empty" id="project-empty" hidden>No logos yet. Start blank or browse templates.</p>
+            <p class="empty" id="project-none" hidden>No projects match that name.</p>
+          </div>
+        </section>
+
+        <section class="screen" id="templates">
+          <div class="device">
+            <div class="topbar"><strong>Templates</strong><span class="spacer"></span><button class="ghost" type="button" data-go="dashboard">Back to projects</button></div>
+            <div class="filters" id="template-filters">
+              <button type="button" data-cat="All" class="is-on">All</button>
+              <button type="button" data-cat="Startup">Startup</button>
+              <button type="button" data-cat="Freelancer">Freelancer</button>
+              <button type="button" data-cat="Local business">Local business</button>
+              <button type="button" data-cat="Agency">Agency</button>
+            </div>
+            <div style="padding:12px 18px"><input class="search" id="template-search" type="search" placeholder="Search templates"></div>
+            <div class="grid" id="template-grid">
+              <article class="card" data-template="Signal" data-category="Startup"><div class="thumb"><svg class="mark-svg" viewBox="0 0 200 80"><circle cx="36" cy="40" r="18" fill="#1f7a4d"/><text x="66" y="48" font-size="24" font-family="Outfit, sans-serif">Signal</text></svg></div><div class="card-copy"><span class="card-name">Signal</span><span class="card-meta">Startup · planned</span></div></article>
+              <article class="card" data-template="Northstar" data-category="Startup"><div class="thumb"><svg class="mark-svg" viewBox="0 0 200 80"><polygon points="28,18 33,34 50,34 36,44 41,60 28,50 15,60 20,44 6,34 23,34" fill="#1b3a4b"/><text x="62" y="48" font-size="22" font-family="Outfit, sans-serif">Northstar</text></svg></div><div class="card-copy"><span class="card-name">Northstar</span><span class="card-meta">Startup · planned</span></div></article>
+              <article class="card" data-template="Studio Mark" data-category="Freelancer"><div class="thumb"><svg class="mark-svg" viewBox="0 0 200 80"><circle cx="40" cy="40" r="22" fill="none" stroke="#111" stroke-width="3"/><text x="28" y="46" font-size="16" font-family="Outfit, sans-serif">SM</text><text x="74" y="46" font-size="20" font-family="Outfit, sans-serif">Studio</text></svg></div><div class="card-copy"><span class="card-name">Studio Mark</span><span class="card-meta">Freelancer · planned</span></div></article>
+              <article class="card" data-template="Monogram" data-category="Freelancer"><div class="thumb"><svg class="mark-svg" viewBox="0 0 200 80"><text x="16" y="58" font-size="48" font-family="Outfit, sans-serif" font-weight="700">AB</text></svg></div><div class="card-copy"><span class="card-name">Monogram</span><span class="card-meta">Freelancer · planned</span></div></article>
+              <article class="card" data-template="Storefront" data-category="Local business"><div class="thumb"><svg class="mark-svg" viewBox="0 0 200 80"><rect x="16" y="28" width="36" height="28" fill="#e07a3d"/><text x="64" y="48" font-size="22" font-family="Outfit, sans-serif">Storefront</text></svg></div><div class="card-copy"><span class="card-name">Storefront</span><span class="card-meta">Local business · planned</span></div></article>
+              <article class="card" data-template="Badge" data-category="Local business"><div class="thumb"><svg class="mark-svg" viewBox="0 0 200 80"><circle cx="40" cy="40" r="22" fill="none" stroke="#c5a46e" stroke-width="4"/><text x="74" y="46" font-size="22" font-family="Outfit, sans-serif">Badge</text></svg></div><div class="card-copy"><span class="card-name">Badge</span><span class="card-meta">Local business · planned</span></div></article>
+              <article class="card" data-template="Wordmark Grid" data-category="Agency"><div class="thumb"><svg class="mark-svg" viewBox="0 0 200 80"><text x="16" y="48" font-size="24" font-family="Outfit, sans-serif" font-weight="700">WORDMARK</text></svg></div><div class="card-copy"><span class="card-name">Wordmark Grid</span><span class="card-meta">Agency · planned</span></div></article>
+              <article class="card" data-template="Split Mark" data-category="Agency"><div class="thumb"><svg class="mark-svg" viewBox="0 0 200 80"><rect x="16" y="22" width="28" height="36" fill="#1b3a4b"/><text x="56" y="40" font-size="18" font-family="Outfit, sans-serif">Split</text><text x="56" y="58" font-size="12" fill="#5e6a66" font-family="Outfit, sans-serif">Agency</text></svg></div><div class="card-copy"><span class="card-name">Split Mark</span><span class="card-meta">Agency · planned</span></div></article>
+            </div>
+            <p class="empty" id="template-none" hidden>No templates match.</p>
+          </div>
+        </section>
+
+        <section class="screen is-active" id="editor">
+          <div class="device editor-shell">
+            <div class="editor-top">
+              <button class="ghost" type="button" data-go="dashboard">Projects</button>
+              <input class="name-input" id="project-name" value="North studio">
+              <span class="status" id="status">Drag the mark, or add a shape.</span>
+              <span class="spacer"></span>
+              <button class="ghost" type="button" id="undo">Undo</button>
+              <button class="ghost" type="button" id="redo">Redo</button>
+              <button class="primary" type="button" id="open-export">Export</button>
+            </div>
+            <div class="editor-main">
+              <div class="tools">
+                <button class="tool is-on" type="button" data-tool="select">Select</button>
+                <button class="tool" type="button" data-tool="text">Text</button>
+                <button class="tool" type="button" data-tool="rect">Rect</button>
+                <button class="tool" type="button" data-tool="ellipse">Ellipse</button>
+                <button class="tool" type="button" data-tool="line">Line</button>
+                <button class="tool" type="button" data-tool="icon">Icon</button>
+                <button class="tool" type="button" data-tool="image">Image</button>
+              </div>
+              <div class="canvas-well" id="canvas-well">
+                <div class="board-fit" id="board-fit">
+                  <div class="board mode-objects" id="board">
+                    <img id="board-image" alt="" hidden>
+                    <div id="object-layer"></div>
+                  </div>
+                </div>
+              </div>
+              <aside class="props">
+                <h2>Properties</h2>
+                <div id="prop-empty" class="muted">Select an object.</div>
+                <div id="prop-form" hidden>
+                  <label class="field">Layer <input id="prop-name"></label>
+                  <label class="field" id="prop-text-wrap">Text <input id="prop-text"></label>
+                  <div class="pair">
+                    <label class="field">X <input id="prop-x" type="number"></label>
+                    <label class="field">Y <input id="prop-y" type="number"></label>
+                  </div>
+                  <p class="muted" id="prop-size"></p>
+                  <label class="field">Fill <input id="prop-fill" type="color"></label>
+                  <label class="field" id="prop-font-wrap">Font size <input id="prop-font" type="number" min="8" max="400"></label>
+                </div>
+                <h2>Layers</h2>
+                <div id="layer-list"></div>
+                <label class="field" style="margin-top:16px">Artboard background <input id="bg-color" type="color" value="#ffffff"></label>
+                <label class="muted"><input id="bg-clear" type="checkbox"> Transparent</label>
+              </aside>
+            </div>
+            <div class="editor-bottom">
+              <button class="mini" type="button" id="zoom-out">−</button>
+              <span id="zoom-label">45%</span>
+              <button class="mini" type="button" id="zoom-in">+</button>
+              <button class="mini" type="button" id="zoom-fit">Fit</button>
+              <span class="muted">Square 1000×1000</span>
+              <span class="spacer"></span>
+              <span class="muted" id="board-label">Objects stay in this browser tab.</span>
+            </div>
+          </div>
+          <div class="dialog" id="export-dialog" hidden>
+            <div class="topbar" style="padding:0 0 12px;border:0">
+              <strong>Export</strong>
+              <span class="spacer"></span>
+              <button class="ghost" type="button" id="close-export">Close</button>
+            </div>
+            <div class="seg" id="format-seg">
+              <button type="button" data-format="svg" class="is-on">SVG</button>
+              <button type="button" data-format="png">PNG</button>
+            </div>
+            <div class="seg" id="scale-seg" style="margin-top:8px">
+              <button type="button" data-scale="1" class="is-on">1×</button>
+              <button type="button" data-scale="2">2×</button>
+            </div>
+            <div class="seg" id="frame-seg" style="margin-top:8px">
+              <button type="button" data-frame="light" class="is-on">Light</button>
+              <button type="button" data-frame="dark">Dark</button>
+              <button type="button" data-frame="checker">Checkerboard</button>
+            </div>
+            <div id="export-frame" class="light"><canvas id="export-canvas"></canvas></div>
+            <p class="muted" id="export-caption">Download uses the artboard in this preview.</p>
+            <button class="primary" type="button" id="download">Download</button>
+          </div>
+        </section>
+
+        <section class="screen" id="reconstruct">
+          <div class="device">
+            <div class="topbar">
+              <strong>Start from an image</strong>
+              <span class="spacer"></span>
+              <button class="primary" type="button" id="save-draft">Save draft</button>
+            </div>
+            <div class="page" style="padding-bottom:0">
+              <p class="lede">PNG and JPG only, up to 8 MB, 64 to 4096 px. This sample is the monochrome test logo. The draft will not match every edge of the original.</p>
+              <div class="seg" id="view-seg">
+                <button type="button" data-view="original" class="is-on">Original</button>
+                <button type="button" data-view="overlay">Overlay</button>
+                <button type="button" data-view="draft">Draft</button>
+              </div>
+            </div>
+            <div class="compare">
+              <div>
+                <div class="pane" data-pane="original"><img src="../test-logos/files/01-monochrome.png" alt="Original North studio logo"></div>
+                <div class="pane" data-pane="overlay" hidden>
+                  <img src="../test-logos/files/01-monochrome.png" alt="">
+                  <svg class="overlay-svg" viewBox="0 0 1000 1000" aria-hidden="true"><circle cx="250" cy="500" r="140" fill="#111"/><text x="440" y="490" font-size="92" font-family="Outfit, sans-serif" font-weight="700">NORTH</text></svg>
+                </div>
+                <div class="pane" data-pane="draft" hidden>
+                  <svg id="draft-svg" viewBox="0 0 1000 1000">
+                    <circle cx="250" cy="500" r="140" fill="#111111"/>
+                    <text id="draft-north" x="440" y="490" font-size="92" font-family="Outfit, sans-serif" font-weight="700" fill="#111111">NORTH</text>
+                    <text x="446" y="560" font-size="28" font-family="Outfit, sans-serif" fill="#111111">STUDIO</text>
+                  </svg>
+                </div>
+              </div>
+              <div class="panel">
+                <h2>Detected</h2>
+                <p>Mark · path</p>
+                <label class="field">NORTH · text <input id="ocr-text" value="NORTH"></label>
+                <label class="field">Font
+                  <select id="ocr-font">
+                    <option>Outfit</option>
+                    <option>Inter</option>
+                    <option>Space Grotesk</option>
+                    <option>Montserrat</option>
+                    <option>Poppins</option>
+                    <option>Playfair Display</option>
+                    <option>Fraunces</option>
+                    <option>Bebas Neue</option>
+                    <option>Libre Baskerville</option>
+                    <option>Source Sans 3</option>
+                  </select>
+                </label>
+                <p class="muted">STUDIO · text</p>
+                <p class="muted">Colors found: #111111. Saving keeps these as normal editable objects in this preview.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" id="tests">
+          <div class="page">
+            <h1>Sample logos</h1>
+            <p class="lede">These are original fixtures. Monochrome and multicolor are the supported reconstruction cases. Gradient and the tiny JPEG only have to fail gently.</p>
+            <div class="cases">
+              <article class="panel case"><img src="../test-logos/files/01-monochrome.png" alt="Monochrome North studio logo"><h2>Monochrome</h2><p class="muted">Editable paths and a text candidate. Keep the original locked.</p></article>
+              <article class="panel case"><img src="../test-logos/files/02-multicolor.png" alt="Multicolor Pine goods logo"><h2>Multicolor</h2><p class="muted">Separate flat colors and a text candidate for PINE.</p></article>
+              <article class="panel case"><img src="../test-logos/files/03-text-heavy.png" alt="Text heavy Harbor legal logo"><h2>Text-heavy</h2><p class="muted">OCR for the main lines. A missing path is acceptable.</p></article>
+              <article class="panel case"><div class="checker-box"><img src="../test-logos/files/04-transparent.png" alt="Transparent kite logo"></div><h2>Transparent</h2><p class="muted">The checkerboard is the preview. The file itself has no background.</p></article>
+              <article class="panel case"><img src="../test-logos/files/05-gradient.png" alt="Gradient Aurora logo"><h2>Gradient</h2><p class="muted">Do not crash. An exact gradient is not required.</p></article>
+              <article class="panel case"><img class="tiny" src="../test-logos/files/06-low-resolution.jpg" alt="Low resolution Pine goods logo at 96 pixels"><img class="pixel" src="../test-logos/files/06-low-resolution.jpg" alt=""><h2>Low resolution</h2><p class="muted">96×96 JPEG. A coarse draft or a failed draft is acceptable.</p></article>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+  <script>
+    const initialPieces = [
+      { layer: "mark", kind: "shape", name: "Mark", text: "", left: "110px", top: "360px", width: "280px", height: "280px", z: "1", fill: "#111111", fontSize: "16px", weight: "700", radius: "50%", hidden: false, locked: false, fontFamily: "Outfit, sans-serif" },
+      { layer: "north", kind: "text", name: "NORTH", text: "NORTH", left: "440px", top: "400px", width: "auto", height: "auto", z: "2", fill: "#111111", fontSize: "92px", weight: "700", radius: "0", hidden: false, locked: false, fontFamily: "Outfit, sans-serif" },
+      { layer: "studio", kind: "text", name: "STUDIO", text: "STUDIO", left: "446px", top: "520px", width: "auto", height: "auto", z: "3", fill: "#111111", fontSize: "28px", weight: "500", radius: "0", hidden: false, locked: false, fontFamily: "Outfit, sans-serif" }
+    ];
+
+    let projects = [
+      { id: "north", name: "North studio", kind: "objects", meta: "Square · 1000×1000", thumb: "../test-logos/files/01-monochrome.png", pieces: structuredClone(initialPieces) },
+      { id: "pine", name: "Pine goods", kind: "image", meta: "Square · 1000×1000", thumb: "../test-logos/files/02-multicolor.png", src: "../test-logos/files/02-multicolor.png", svg: "../test-logos/files/02-multicolor.svg", w: 1000, h: 1000 },
+      { id: "harbor", name: "Harbor legal", kind: "image", meta: "Horizontal · 1600×800", thumb: "../test-logos/files/03-text-heavy.png", src: "../test-logos/files/03-text-heavy.png", svg: "../test-logos/files/03-text-heavy.svg", w: 1600, h: 800 }
+    ];
+
+    let currentId = "north";
+    let editorMode = "objects";
+    let selected = "mark";
+    let boardW = 1000;
+    let boardH = 1000;
+    let zoom = 0.45;
+    let currentScreen = "editor";
+    let past = [];
+    let future = [];
+    let drag = null;
+    let exportFormat = "svg";
+    let exportScale = 1;
+    let artboardBg = "#ffffff";
+    let artboardClear = false;
+
+    const board = document.getElementById("board");
+    const projectName = document.getElementById("project-name");
+
+    function uid() { return "obj-" + Math.random().toString(36).slice(2, 8); }
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    }
+    function setStatus(text) { document.getElementById("status").textContent = text; }
+    function slug(name) {
+      const value = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      return value || "logo";
+    }
+    function selectedPiece() {
+      if (!selected) return null;
+      return document.querySelector("#object-layer .piece[data-layer='" + CSS.escape(selected) + "']");
+    }
+    function capture() {
+      return [...document.querySelectorAll("#object-layer .piece")].map((el) => ({
+        layer: el.dataset.layer,
+        kind: el.dataset.kind,
+        name: el.dataset.name,
+        text: el.dataset.kind === "text" ? el.textContent : "",
+        left: el.style.left,
+        top: el.style.top,
+        width: el.style.width || "auto",
+        height: el.style.height || "auto",
+        z: el.style.zIndex || "1",
+        fill: el.dataset.fill,
+        fontSize: el.style.fontSize || "16px",
+        weight: el.style.fontWeight || "600",
+        radius: el.style.borderRadius || "0",
+        hidden: el.classList.contains("is-hidden"),
+        locked: el.dataset.locked === "true",
+        fontFamily: el.style.fontFamily || "Outfit, sans-serif"
+      }));
+    }
+    function historyPush() {
+      past.push(JSON.stringify(capture()));
+      future = [];
+    }
+    function syncProjectFromEditor() {
+      const project = projects.find((item) => item.id === currentId);
+      if (!project) return;
+      project.name = projectName.value.trim() || project.name;
+      if (project.kind === "objects" && editorMode === "objects") project.pieces = capture();
+    }
+    function applyZoom() {
+      document.documentElement.style.setProperty("--zoom", String(zoom));
+      document.documentElement.style.setProperty("--board-w", boardW + "px");
+      document.documentElement.style.setProperty("--board-h", boardH + "px");
+      document.getElementById("zoom-label").textContent = Math.round(zoom * 100) + "%";
+    }
+    function fitZoom() {
+      const well = document.getElementById("canvas-well");
+      const next = Math.min((well.clientWidth - 48) / boardW, (well.clientHeight - 48) / boardH);
+      zoom = Math.max(0.15, Math.min(next || 0.45, 1));
+      applyZoom();
+    }
+    function paintBoardChrome() {
+      board.style.background = artboardClear ? "" : artboardBg;
+      board.classList.toggle("is-checker", artboardClear);
+    }
+    function pieceElement(item) {
+      const el = document.createElement("div");
+      el.className = "piece " + (item.kind === "text" ? "piece-text" : "piece-shape");
+      if (item.hidden) el.classList.add("is-hidden");
+      if (item.layer === selected) el.classList.add("is-selected");
+      el.dataset.layer = item.layer;
+      el.dataset.kind = item.kind;
+      el.dataset.name = item.name;
+      el.dataset.locked = item.locked ? "true" : "false";
+      el.dataset.fill = item.fill;
+      el.style.left = item.left;
+      el.style.top = item.top;
+      el.style.zIndex = item.z;
+      el.style.fontFamily = item.fontFamily || "Outfit, sans-serif";
+      if (item.kind === "shape") {
+        el.style.width = item.width;
+        el.style.height = item.height;
+        el.style.background = item.fill;
+        el.style.borderRadius = item.radius || "0";
+      } else {
+        el.textContent = item.text;
+        el.style.fontSize = item.fontSize;
+        el.style.fontWeight = item.weight || "700";
+        el.style.color = item.fill;
+      }
+      return el;
+    }
+    function layerRow(item) {
+      const row = document.createElement("div");
+      row.className = "layer-row" + (item.layer === selected ? " is-selected" : "");
+      row.dataset.layer = item.layer;
+      row.innerHTML = "<button type='button' class='layer-name'>" + escapeHtml(item.name) + "</button>" +
+        "<button type='button' data-act='hide'>" + (item.hidden ? "Show" : "Hide") + "</button>" +
+        "<button type='button' data-act='lock'>" + (item.locked ? "Unlock" : "Lock") + "</button>" +
+        "<button type='button' data-act='up'>Up</button>" +
+        "<button type='button' data-act='down'>Down</button>";
+      return row;
+    }
+    function paintProperties() {
+      const piece = selectedPiece();
+      document.getElementById("prop-empty").hidden = !!piece;
+      document.getElementById("prop-form").hidden = !piece;
+      if (!piece) return;
+      document.getElementById("prop-name").value = piece.dataset.name;
+      const isText = piece.dataset.kind === "text";
+      document.getElementById("prop-text-wrap").hidden = !isText;
+      document.getElementById("prop-font-wrap").hidden = !isText;
+      if (isText) {
+        document.getElementById("prop-text").value = piece.textContent;
+        document.getElementById("prop-font").value = parseFloat(piece.style.fontSize) || 64;
+      }
+      document.getElementById("prop-x").value = parseFloat(piece.style.left) || 0;
+      document.getElementById("prop-y").value = parseFloat(piece.style.top) || 0;
+      document.getElementById("prop-fill").value = piece.dataset.fill || "#111111";
+      const w = piece.dataset.kind === "shape" ? (parseFloat(piece.style.width) + " × " + parseFloat(piece.style.height)) : "Text";
+      document.getElementById("prop-size").textContent = w + (piece.dataset.locked === "true" ? " · locked" : "");
+    }
+    function render(items) {
+      document.getElementById("object-layer").replaceChildren(...items.map(pieceElement));
+      const ordered = [...items].sort((a, b) => Number(b.z) - Number(a.z));
+      document.getElementById("layer-list").replaceChildren(...ordered.map(layerRow));
+      if (selected && !items.some((item) => item.layer === selected)) selected = items[0] ? items[0].layer : null;
+      paintProperties();
+      syncProjectFromEditor();
+    }
+    function selectLayer(id) {
+      selected = id;
+      document.querySelectorAll("#object-layer .piece").forEach((el) => el.classList.toggle("is-selected", el.dataset.layer === id));
+      document.querySelectorAll(".layer-row").forEach((el) => el.classList.toggle("is-selected", el.dataset.layer === id));
+      paintProperties();
+    }
+    function setMode(mode) {
+      editorMode = mode;
+      board.classList.toggle("mode-image", mode === "image");
+      board.classList.toggle("mode-objects", mode === "objects");
+      document.getElementById("board-image").hidden = mode !== "image";
+    }
+    function show(id) {
+      if (id === "export") {
+        show("editor");
+        openExport();
+        return;
+      }
+      if (currentScreen === "editor" && id !== "editor") syncProjectFromEditor();
+      currentScreen = id;
+      document.querySelectorAll(".screen").forEach((screen) => screen.classList.toggle("is-active", screen.id === id));
+      document.querySelectorAll(".rail [data-go]").forEach((button) => button.classList.toggle("is-on", button.dataset.go === id));
+      if (location.hash !== "#" + id) history.replaceState(null, "", "#" + id);
+      if (id === "dashboard") renderProjects();
+      if (id === "editor") requestAnimationFrame(fitZoom);
+      if (id !== "editor") closeExport();
+    }
+    function renderProjects() {
+      const query = document.getElementById("project-search").value.trim().toLowerCase();
+      const grid = document.getElementById("project-grid");
+      const visible = projects.filter((project) => project.name.toLowerCase().includes(query));
+      grid.replaceChildren(...visible.map((project) => {
+        const card = document.createElement("article");
+        card.className = "card";
+        card.dataset.id = project.id;
+        const thumb = project.thumb ? "<img src='" + project.thumb + "' alt=''>" : "<strong>" + escapeHtml(project.name.slice(0, 1)) + "</strong>";
+        card.innerHTML = "<button type='button' class='card-open' data-open='" + project.id + "'><div class='thumb'>" + thumb + "</div><div class='card-copy'><span class='card-name'>" + escapeHtml(project.name) + "</span><span class='card-meta'>" + escapeHtml(project.meta) + "</span></div></button><div class='card-actions'><button type='button' data-action='rename'>Rename</button><button type='button' data-action='duplicate'>Duplicate</button><button type='button' data-action='delete'>Delete</button></div><div class='confirm-delete' hidden><span class='muted'>Delete this preview?</span><button type='button' data-action='confirm-delete'>Delete</button><button type='button' data-action='cancel-delete'>Keep</button></div>";
+        return card;
+      }));
+      document.getElementById("project-empty").hidden = projects.length !== 0;
+      document.getElementById("project-none").hidden = projects.length === 0 || visible.length !== 0;
+    }
+    function openObjects(project) {
+      currentId = project.id;
+      setMode("objects");
+      boardW = 1000;
+      boardH = 1000;
+      projectName.value = project.name;
+      document.getElementById("board-label").textContent = "Square 1000×1000";
+      const pieces = project.pieces ? structuredClone(project.pieces) : [];
+      selected = pieces.length ? pieces[pieces.length - 1].layer : null;
+      past = [];
+      future = [];
+      render(pieces);
+      show("editor");
+    }
+    function openImage(project) {
+      currentId = project.id;
+      setMode("image");
+      boardW = project.w;
+      boardH = project.h;
+      projectName.value = project.name;
+      document.getElementById("board-label").textContent = project.meta;
+      const image = document.getElementById("board-image");
+      image.src = project.src;
+      image.alt = project.name;
+      document.getElementById("object-layer").replaceChildren();
+      document.getElementById("layer-list").innerHTML = "<div class='layer-row is-selected'><span class='layer-name'>Artwork</span></div>";
+      selected = null;
+      paintProperties();
+      show("editor");
+      setStatus("Image preview. Open North studio or a new logo to edit objects.");
+    }
+    function activate(project) {
+      if (currentScreen === "editor") syncProjectFromEditor();
+      if (project.kind === "image") openImage(project);
+      else openObjects(project);
+    }
+    function addPiece(partial) {
+      if (editorMode !== "objects") {
+        setStatus("Open North studio or a new logo to add objects.");
+        return;
+      }
+      historyPush();
+      const items = capture();
+      const z = items.reduce((max, item) => Math.max(max, Number(item.z) || 0), 0) + 1;
+      const item = Object.assign({
+        kind: "shape", name: "Object", text: "", left: "160px", top: "160px", width: "160px", height: "160px",
+        fill: "#1f7a4d", fontSize: "64px", weight: "700", radius: "0", hidden: false, locked: false,
+        fontFamily: "Outfit, sans-serif", z: String(z), layer: uid()
+      }, partial);
+      item.layer = uid();
+      items.push(item);
+      selected = item.layer;
+      render(items);
+      setStatus("Added " + item.name + ".");
+    }
+
+    document.body.addEventListener("click", (event) => {
+      const go = event.target.closest("[data-go]");
+      if (go) show(go.dataset.go);
+    });
+
+    document.getElementById("signin-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const error = document.getElementById("signin-error");
+      if (!email || !password) {
+        error.hidden = false;
+        return;
+      }
+      error.hidden = true;
+      show("dashboard");
+    });
+
+    document.getElementById("project-search").addEventListener("input", renderProjects);
+    document.getElementById("new-logo").addEventListener("click", () => {
+      const project = { id: uid(), name: "Untitled logo", kind: "objects", meta: "Square · 1000×1000", thumb: null, pieces: [] };
+      projects.unshift(project);
+      activate(project);
+      setStatus("Empty artboard. Add text or a shape.");
+    });
+    document.getElementById("project-grid").addEventListener("click", (event) => {
+      const card = event.target.closest(".card");
+      if (!card) return;
+      const project = projects.find((item) => item.id === card.dataset.id);
+      const action = event.target.dataset.action;
+      if (event.target.closest("[data-open]") && !action) activate(project);
+      if (action === "rename") {
+        const name = card.querySelector(".card-name");
+        const input = document.createElement("input");
+        input.className = "rename-input";
+        input.value = project.name;
+        name.replaceWith(input);
+        input.focus();
+        input.select();
+        let done = false;
+        const finish = (save) => {
+          if (done) return;
+          done = true;
+          if (save) {
+            project.name = input.value.trim() || project.name;
+            if (currentId === project.id) projectName.value = project.name;
+          }
+          renderProjects();
+        };
+        input.addEventListener("keydown", (keyEvent) => {
+          if (keyEvent.key === "Enter") finish(true);
+          if (keyEvent.key === "Escape") finish(false);
+        });
+        input.addEventListener("blur", () => finish(true));
+      }
+      if (action === "duplicate") {
+        const copy = structuredClone(project);
+        copy.id = uid();
+        copy.name = project.name + " copy";
+        projects.unshift(copy);
+        renderProjects();
+      }
+      if (action === "delete") card.querySelector(".confirm-delete").hidden = false;
+      if (action === "cancel-delete") card.querySelector(".confirm-delete").hidden = true;
+      if (action === "confirm-delete") {
+        projects = projects.filter((item) => item.id !== project.id);
+        renderProjects();
+      }
+    });
+
+    document.getElementById("template-filters").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-cat]");
+      if (!button) return;
+      document.querySelectorAll("[data-cat]").forEach((item) => item.classList.toggle("is-on", item === button));
+      filterTemplates();
+    });
+    document.getElementById("template-search").addEventListener("input", filterTemplates);
+    function filterTemplates() {
+      const category = document.querySelector("[data-cat].is-on").dataset.cat;
+      const query = document.getElementById("template-search").value.trim().toLowerCase();
+      let shown = 0;
+      document.querySelectorAll("[data-template]").forEach((card) => {
+        const visible = (category === "All" || card.dataset.category === category) && card.dataset.template.toLowerCase().includes(query);
+        card.hidden = !visible;
+        if (visible) shown += 1;
+      });
+      document.getElementById("template-none").hidden = shown !== 0;
+    }
+    document.getElementById("template-grid").addEventListener("click", (event) => {
+      const card = event.target.closest("[data-template]");
+      if (!card) return;
+      const name = card.dataset.template;
+      const project = {
+        id: uid(),
+        name: name + " copy",
+        kind: "objects",
+        meta: "From template · " + card.dataset.category,
+        thumb: null,
+        pieces: [{
+          layer: uid(), kind: "text", name: "Name", text: name, left: "80px", top: "440px", width: "auto", height: "auto",
+          z: "1", fill: "#1b3a4b", fontSize: "72px", weight: "700", radius: "0", hidden: false, locked: false,
+          fontFamily: "Outfit, sans-serif"
+        }]
+      };
+      projects.unshift(project);
+      activate(project);
+      setStatus("Template copy. The original template is unchanged.");
+    });
+
+    document.querySelector(".tools").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-tool]");
+      if (!button) return;
+      document.querySelectorAll("[data-tool]").forEach((item) => item.classList.toggle("is-on", item === button));
+      const tool = button.dataset.tool;
+      if (tool === "select") setStatus("Drag an unlocked object.");
+      if (tool === "text") addPiece({ kind: "text", name: "Text", text: "Text", width: "auto", height: "auto", fill: "#1b3a4b" });
+      if (tool === "rect") addPiece({ name: "Rectangle", width: "220px", height: "120px", fill: "#1f7a4d", radius: "0" });
+      if (tool === "ellipse") addPiece({ name: "Ellipse", width: "160px", height: "160px", fill: "#e07a3d", radius: "50%" });
+      if (tool === "line") addPiece({ name: "Line", width: "320px", height: "6px", fill: "#111111", radius: "0", top: "220px" });
+      if (tool === "icon") addPiece({ name: "Icon", width: "96px", height: "96px", fill: "#0f62fe", radius: "50%" });
+      if (tool === "image") setStatus("Image upload arrives with the editor build. Use a sample project for now.");
+    });
+
+    document.getElementById("layer-list").addEventListener("click", (event) => {
+      const row = event.target.closest(".layer-row");
+      if (!row || editorMode !== "objects") return;
+      const id = row.dataset.layer;
+      const act = event.target.dataset.act;
+      if (!act) return selectLayer(id);
+      const items = capture();
+      const item = items.find((entry) => entry.layer === id);
+      if (!item) return;
+      if (act === "hide" || act === "lock") historyPush();
+      if (act === "hide") item.hidden = !item.hidden;
+      if (act === "lock") item.locked = !item.locked;
+      if (act === "up" || act === "down") {
+        const sorted = [...items].sort((a, b) => Number(a.z) - Number(b.z));
+        const index = sorted.findIndex((entry) => entry.layer === id);
+        const swapIndex = act === "up" ? index + 1 : index - 1;
+        if (swapIndex < 0 || swapIndex >= sorted.length) return;
+        historyPush();
+        const tmp = sorted[index].z;
+        sorted[index].z = sorted[swapIndex].z;
+        sorted[swapIndex].z = tmp;
+        selected = id;
+        render(sorted);
+        return;
+      }
+      selected = id;
+      render(items);
+    });
+
+    document.getElementById("object-layer").addEventListener("pointerdown", (event) => {
+      const piece = event.target.closest(".piece");
+      if (!piece) return;
+      selectLayer(piece.dataset.layer);
+      if (piece.dataset.locked === "true") {
+        setStatus("This layer is locked.");
+        return;
+      }
+      const boardRect = board.getBoundingClientRect();
+      const pieceRect = piece.getBoundingClientRect();
+      drag = {
+        piece,
+        before: JSON.stringify(capture()),
+        offsetX: (event.clientX - pieceRect.left) / zoom,
+        offsetY: (event.clientY - pieceRect.top) / zoom,
+        startLeft: piece.style.left,
+        startTop: piece.style.top
+      };
+      piece.setPointerCapture(event.pointerId);
+    });
+    window.addEventListener("pointermove", (event) => {
+      if (!drag) return;
+      const boardRect = board.getBoundingClientRect();
+      const x = (event.clientX - boardRect.left) / zoom - drag.offsetX;
+      const y = (event.clientY - boardRect.top) / zoom - drag.offsetY;
+      drag.piece.style.left = Math.round(x) + "px";
+      drag.piece.style.top = Math.round(y) + "px";
+      paintProperties();
+    });
+    window.addEventListener("pointerup", () => {
+      if (!drag) return;
+      const moved = drag.piece.style.left !== drag.startLeft || drag.piece.style.top !== drag.startTop;
+      if (moved) {
+        past.push(drag.before);
+        future = [];
+        syncProjectFromEditor();
+      }
+      drag = null;
+    });
+
+    function bindHistoryInput(input, apply) {
+      let before = null;
+      input.addEventListener("focus", () => { before = JSON.stringify(capture()); });
+      input.addEventListener("input", apply);
+      input.addEventListener("change", () => {
+        if (before && before !== JSON.stringify(capture())) {
+          past.push(before);
+          future = [];
+          syncProjectFromEditor();
+        }
+        before = null;
+      });
+    }
+    bindHistoryInput(document.getElementById("prop-name"), () => {
+      const piece = selectedPiece();
+      if (!piece) return;
+      piece.dataset.name = document.getElementById("prop-name").value;
+      const label = document.querySelector(".layer-row.is-selected .layer-name");
+      if (label) label.textContent = piece.dataset.name;
+    });
+    bindHistoryInput(document.getElementById("prop-text"), () => {
+      const piece = selectedPiece();
+      if (!piece) return;
+      piece.textContent = document.getElementById("prop-text").value;
+    });
+    bindHistoryInput(document.getElementById("prop-x"), () => {
+      const piece = selectedPiece();
+      if (!piece || piece.dataset.locked === "true") return;
+      piece.style.left = (parseFloat(document.getElementById("prop-x").value) || 0) + "px";
+    });
+    bindHistoryInput(document.getElementById("prop-y"), () => {
+      const piece = selectedPiece();
+      if (!piece || piece.dataset.locked === "true") return;
+      piece.style.top = (parseFloat(document.getElementById("prop-y").value) || 0) + "px";
+    });
+    bindHistoryInput(document.getElementById("prop-fill"), () => {
+      const piece = selectedPiece();
+      if (!piece) return;
+      const fill = document.getElementById("prop-fill").value;
+      piece.dataset.fill = fill;
+      if (piece.dataset.kind === "shape") piece.style.background = fill;
+      else piece.style.color = fill;
+    });
+    bindHistoryInput(document.getElementById("prop-font"), () => {
+      const piece = selectedPiece();
+      if (!piece || piece.dataset.kind !== "text") return;
+      piece.style.fontSize = (parseFloat(document.getElementById("prop-font").value) || 64) + "px";
+    });
+
+    function undo() {
+      if (!past.length || editorMode !== "objects") return;
+      future.push(JSON.stringify(capture()));
+      render(JSON.parse(past.pop()));
+      setStatus("Undone.");
+    }
+    function redo() {
+      if (!future.length || editorMode !== "objects") return;
+      past.push(JSON.stringify(capture()));
+      render(JSON.parse(future.pop()));
+      setStatus("Redone.");
+    }
+    document.getElementById("undo").addEventListener("click", undo);
+    document.getElementById("redo").addEventListener("click", redo);
+    document.getElementById("zoom-in").addEventListener("click", () => { zoom = Math.min(2, zoom + 0.1); applyZoom(); });
+    document.getElementById("zoom-out").addEventListener("click", () => { zoom = Math.max(0.15, zoom - 0.1); applyZoom(); });
+    document.getElementById("zoom-fit").addEventListener("click", fitZoom);
+    document.getElementById("bg-color").addEventListener("input", (event) => {
+      artboardBg = event.target.value;
+      paintBoardChrome();
+    });
+    document.getElementById("bg-clear").addEventListener("change", (event) => {
+      artboardClear = event.target.checked;
+      paintBoardChrome();
+    });
+    projectName.addEventListener("change", syncProjectFromEditor);
+
+    document.addEventListener("keydown", (event) => {
+      if (event.target.matches("input, textarea, select")) return;
+      if (currentScreen !== "editor" || editorMode !== "objects") return;
+      const piece = selectedPiece();
+      const key = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && key === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redo(); else undo();
+      }
+      if ((event.ctrlKey || event.metaKey) && key === "y") { event.preventDefault(); redo(); }
+      if (!piece) return;
+      if (piece.dataset.locked === "true") return;
+      const step = event.shiftKey ? 10 : 1;
+      if (event.key.startsWith("Arrow")) {
+        historyPush();
+        const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+        const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+        piece.style.left = (parseFloat(piece.style.left) + dx) + "px";
+        piece.style.top = (parseFloat(piece.style.top) + dy) + "px";
+        paintProperties();
+        syncProjectFromEditor();
+        event.preventDefault();
+      }
+      if (event.key === "Delete" || event.key === "Backspace") {
+        historyPush();
+        render(capture().filter((item) => item.layer !== piece.dataset.layer));
+        setStatus("Deleted.");
+        event.preventDefault();
+      }
+      if ((event.ctrlKey || event.metaKey) && key === "d") {
+        event.preventDefault();
+        const items = capture();
+        const source = items.find((item) => item.layer === piece.dataset.layer);
+        historyPush();
+        const copy = structuredClone(source);
+        copy.layer = uid();
+        copy.left = (parseFloat(source.left) + 24) + "px";
+        copy.top = (parseFloat(source.top) + 24) + "px";
+        copy.name = source.name + " copy";
+        items.push(copy);
+        selected = copy.layer;
+        render(items);
+      }
+    });
+
+    function openExport() {
+      document.getElementById("export-dialog").hidden = false;
+      document.getElementById("editor").classList.add("dialog-back");
+      paintExportPreview();
+    }
+    function closeExport() {
+      document.getElementById("export-dialog").hidden = true;
+    }
+    document.getElementById("open-export").addEventListener("click", openExport);
+    document.getElementById("close-export").addEventListener("click", closeExport);
+    document.getElementById("format-seg").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-format]");
+      if (!button) return;
+      exportFormat = button.dataset.format;
+      document.querySelectorAll("[data-format]").forEach((item) => item.classList.toggle("is-on", item === button));
+      document.getElementById("scale-seg").style.opacity = exportFormat === "png" ? "1" : "0.45";
+      paintExportPreview();
+    });
+    document.getElementById("scale-seg").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-scale]");
+      if (!button) return;
+      exportScale = Number(button.dataset.scale);
+      document.querySelectorAll("[data-scale]").forEach((item) => item.classList.toggle("is-on", item === button));
+      paintExportPreview();
+    });
+    document.getElementById("frame-seg").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-frame]");
+      if (!button) return;
+      document.querySelectorAll("[data-frame]").forEach((item) => item.classList.toggle("is-on", item === button));
+      document.getElementById("export-frame").className = button.dataset.frame;
+    });
+
+    function drawObjects(ctx, scale, transparent) {
+      if (!transparent) {
+        ctx.fillStyle = artboardBg;
+        ctx.fillRect(0, 0, boardW * scale, boardH * scale);
+      }
+      capture().filter((item) => !item.hidden).sort((a, b) => Number(a.z) - Number(b.z)).forEach((item) => {
+        ctx.fillStyle = item.fill;
+        const x = parseFloat(item.left) * scale;
+        const y = parseFloat(item.top) * scale;
+        if (item.kind === "shape") {
+          const w = parseFloat(item.width) * scale;
+          const h = parseFloat(item.height) * scale;
+          if (item.radius === "50%") {
+            ctx.beginPath();
+            ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+          } else ctx.fillRect(x, y, w, h);
+        } else {
+          const size = parseFloat(item.fontSize) * scale;
+          ctx.font = (item.weight || 700) + " " + size + "px " + (item.fontFamily || "Outfit, sans-serif");
+          ctx.textBaseline = "top";
+          ctx.fillText(item.text, x, y);
+        }
+      });
+    }
+    function paintExportPreview() {
+      const canvas = document.getElementById("export-canvas");
+      const scale = 360 / boardW;
+      canvas.width = Math.round(boardW * scale);
+      canvas.height = Math.round(boardH * scale);
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (editorMode === "image") {
+        const image = document.getElementById("board-image");
+        if (!artboardClear) {
+          ctx.fillStyle = artboardBg;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      } else drawObjects(ctx, scale, artboardClear);
+      const downloadScale = exportFormat === "png" ? exportScale : 1;
+      document.getElementById("export-caption").textContent = exportFormat.toUpperCase() + " · " + (boardW * downloadScale) + " × " + (boardH * downloadScale) + " · " + (artboardClear ? "transparent" : artboardBg);
+    }
+    function objectsToSvg() {
+      const bg = artboardClear ? "" : "<rect width='" + boardW + "' height='" + boardH + "' fill='" + artboardBg + "'/>";
+      const body = capture().filter((item) => !item.hidden).sort((a, b) => Number(a.z) - Number(b.z)).map((item) => {
+        const x = parseFloat(item.left);
+        const y = parseFloat(item.top);
+        if (item.kind === "shape") {
+          const w = parseFloat(item.width);
+          const h = parseFloat(item.height);
+          if (item.radius === "50%") return "<ellipse cx='" + (x + w / 2) + "' cy='" + (y + h / 2) + "' rx='" + (w / 2) + "' ry='" + (h / 2) + "' fill='" + item.fill + "'/>";
+          return "<rect x='" + x + "' y='" + y + "' width='" + w + "' height='" + h + "' fill='" + item.fill + "'/>";
+        }
+        return "<text x='" + x + "' y='" + (y + parseFloat(item.fontSize) * 0.82) + "' font-family='" + escapeHtml(item.fontFamily || "Outfit") + "' font-size='" + parseFloat(item.fontSize) + "' font-weight='" + (parseInt(item.weight, 10) || 700) + "' fill='" + item.fill + "'>" + escapeHtml(item.text) + "</text>";
+      }).join("");
+      return "<svg xmlns='http://www.w3.org/2000/svg' width='" + boardW + "' height='" + boardH + "' viewBox='0 0 " + boardW + " " + boardH + "'>" + bg + body + "</svg>";
+    }
+    function triggerDownload(href, filename) {
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+    document.getElementById("download").addEventListener("click", async () => {
+      const name = slug(projectName.value);
+      const project = projects.find((item) => item.id === currentId);
+      setStatus("Preparing download…");
+      if (exportFormat === "svg" && editorMode === "image" && project && project.svg) {
+        triggerDownload(project.svg, name + ".svg");
+        setStatus("Downloaded the sample SVG.");
+        return;
+      }
+      if (exportFormat === "svg") {
+        const blob = new Blob([objectsToSvg()], { type: "image/svg+xml" });
+        triggerDownload(URL.createObjectURL(blob), name + ".svg");
+        setStatus("Downloaded SVG.");
+        return;
+      }
+      await document.fonts.ready;
+      const scale = exportScale;
+      const canvas = document.createElement("canvas");
+      canvas.width = boardW * scale;
+      canvas.height = boardH * scale;
+      const ctx = canvas.getContext("2d");
+      if (editorMode === "image") {
+        if (!artboardClear) {
+          ctx.fillStyle = artboardBg;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        ctx.drawImage(document.getElementById("board-image"), 0, 0, canvas.width, canvas.height);
+      } else drawObjects(ctx, scale, artboardClear);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      triggerDownload(URL.createObjectURL(blob), name + (scale === 2 ? "@2x" : "") + ".png");
+      setStatus("Downloaded PNG.");
+    });
+
+    document.getElementById("view-seg").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-view]");
+      if (!button) return;
+      document.querySelectorAll("[data-view]").forEach((item) => item.classList.toggle("is-on", item === button));
+      document.querySelectorAll("[data-pane]").forEach((pane) => { pane.hidden = pane.dataset.pane !== button.dataset.view; });
+    });
+    document.getElementById("ocr-text").addEventListener("input", (event) => {
+      document.getElementById("draft-north").textContent = event.target.value || "NORTH";
+    });
+    document.getElementById("ocr-font").addEventListener("change", (event) => {
+      document.getElementById("draft-north").setAttribute("font-family", event.target.value + ", sans-serif");
+    });
+    document.getElementById("save-draft").addEventListener("click", () => {
+      const word = document.getElementById("ocr-text").value || "NORTH";
+      const font = document.getElementById("ocr-font").value + ", sans-serif";
+      const project = {
+        id: uid(),
+        name: word + " draft",
+        kind: "objects",
+        meta: "Reconstruction draft",
+        thumb: "../test-logos/files/01-monochrome.png",
+        pieces: [
+          { layer: uid(), kind: "shape", name: "Mark", text: "", left: "110px", top: "360px", width: "280px", height: "280px", z: "1", fill: "#111111", fontSize: "16px", weight: "700", radius: "50%", hidden: false, locked: false, fontFamily: font },
+          { layer: uid(), kind: "text", name: word, text: word, left: "440px", top: "400px", width: "auto", height: "auto", z: "2", fill: "#111111", fontSize: "92px", weight: "700", radius: "0", hidden: false, locked: false, fontFamily: font },
+          { layer: uid(), kind: "text", name: "STUDIO", text: "STUDIO", left: "446px", top: "520px", width: "auto", height: "auto", z: "3", fill: "#111111", fontSize: "28px", weight: "500", radius: "0", hidden: false, locked: false, fontFamily: "Outfit, sans-serif" }
+        ]
+      };
+      projects.unshift(project);
+      activate(project);
+      setStatus("Draft saved in this preview. Refreshing the page clears it.");
+    });
+
+    render(structuredClone(initialPieces));
+    paintBoardChrome();
+    applyZoom();
+    const start = location.hash.replace("#", "");
+    if (start === "export") show("export");
+    else if (start && document.getElementById(start)) show(start);
+    requestAnimationFrame(fitZoom);
+  </script>
+</body>
+</html>

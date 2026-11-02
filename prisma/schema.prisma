@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum VersionSource {
+  save
+  autosave
+  duplicate
+  template
+  reconstruction
+}
+
+enum TemplateCategory {
+  startup
+  freelancer
+  local_business @map("local-business")
+  agency
+}
+
+enum AssetKind {
+  upload
+  preview
+  icon
+  font
+}
+
+enum JobStatus {
+  queued
+  running
+  succeeded
+  failed
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  projects     Project[]
+  assets       Asset[]
+  jobs         ReconstructionJob[]
+}
+
+model Project {
+  id            String    @id @default(cuid())
+  ownerId       String
+  owner         User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name          String
+  schemaVersion Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+  shareToken    String?   @unique
+  versions      ProjectVersion[]
+  assets        Asset[]
+  jobs          ReconstructionJob[]
+
+  @@index([ownerId, updatedAt])
+}
+
+model ProjectVersion {
+  id        String        @id @default(cuid())
+  projectId String
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  number    Int
+  document  Json
+  source    VersionSource
+  createdAt DateTime      @default(now())
+  jobs      ReconstructionJob[]
+
+  @@unique([projectId, number])
+}
+
+model Template {
+  id             String           @id @default(cuid())
+  slug           String           @unique
+  name           String
+  category       TemplateCategory
+  description    String
+  document       Json
+  schemaVersion  Int              @default(1)
+  previewAssetId String?          @unique
+  previewAsset   Asset?           @relation("TemplatePreview", fields: [previewAssetId], references: [id])
+  published      Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+
+  @@index([category])
+}
+
+model Asset {
+  id          String    @id @default(cuid())
+  ownerId     String?
+  owner       User?     @relation(fields: [ownerId], references: [id])
+  projectId   String?
+  project     Project?  @relation(fields: [projectId], references: [id])
+  kind        AssetKind
+  storageKey  String
+  mimeType    String
+  byteSize    Int
+  width       Int?
+  height      Int?
+  licenseName String
+  sourceName  String
+  createdAt   DateTime  @default(now())
+  template    Template? @relation("TemplatePreview")
+  jobs        ReconstructionJob[]
+
+  @@index([ownerId])
+  @@index([projectId])
+}
+
+model ReconstructionJob {
+  id              String          @id @default(cuid())
+  ownerId         String
+  owner           User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  projectId       String
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceAssetId   String
+  sourceAsset     Asset           @relation(fields: [sourceAssetId], references: [id])
+  status          JobStatus       @default(queued)
+  errorCode       String?
+  errorMessage    String?
+  resultVersionId String?
+  resultVersion   ProjectVersion? @relation(fields: [resultVersionId], references: [id])
+  createdAt       DateTime        @default(now())
+  startedAt       DateTime?
+  finishedAt      DateTime?
+
+  @@index([ownerId, status])
+}
