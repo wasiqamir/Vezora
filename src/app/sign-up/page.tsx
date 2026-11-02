@@ -1,13 +1,24 @@
+import { Suspense } from "react";
 import Link from "next/link";
+import { connection } from "next/server";
 import { signUpAction } from "@/features/account/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export default async function SignUpPage({
+export default function SignUpPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
+  return (
+    <Suspense fallback={<p className="px-4 py-10 text-sm text-muted-foreground">Loading sign-up…</p>}>
+      <SignUpForm searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function SignUpForm({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  await connection();
   const params = await searchParams;
   const message =
     params.error === "exists"

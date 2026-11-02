@@ -1,13 +1,28 @@
+import { Suspense } from "react";
 import Link from "next/link";
+import { connection } from "next/server";
 import { signInAction } from "@/features/account/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export default async function SignInPage({
+export default function SignInPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string; callbackUrl?: string }>;
 }) {
+  return (
+    <Suspense fallback={<p className="px-4 py-10 text-sm text-muted-foreground">Loading sign-in…</p>}>
+      <SignInForm searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function SignInForm({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; callbackUrl?: string }>;
+}) {
+  await connection();
   const params = await searchParams;
   const callbackUrl = params.callbackUrl?.startsWith("/") ? params.callbackUrl : "/dashboard";
 
