@@ -8,7 +8,18 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (PUBLIC_PATH.some((pattern) => pattern.test(pathname))) return NextResponse.next();
 
-  const token = await getToken({ req: request, secret: process.env.AUTH_SECRET });
+  const forwarded = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol.replace(":", "");
+  const secureCookie = forwarded.split(",")[0]?.trim() === "https";
+  let token = null;
+  try {
+    token = await getToken({
+      req: request,
+      secret: process.env.AUTH_SECRET,
+      secureCookie,
+    });
+  } catch {
+    token = null;
+  }
   if (token) return NextResponse.next();
 
   if (pathname.startsWith("/api/")) {

@@ -5,6 +5,8 @@ import { verifyPassword } from "@/lib/password";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
+  // The live site is HTTPS. A secure session cookie is what the next request can read.
+  useSecureCookies: process.env.NODE_ENV === "production",
   session: { strategy: "jwt" },
   pages: { signIn: "/sign-in" },
   providers: [
