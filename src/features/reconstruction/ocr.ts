@@ -1,4 +1,4 @@
-import { createWorker } from "tesseract.js";
+import { createWorker, PSM } from "tesseract.js";
 import { compositeOnWhite, encodePng, ocrPlates, type Raster } from "@/features/reconstruction/preprocess";
 
 export type TextHit = {
@@ -15,8 +15,8 @@ export async function readText(raster: Raster): Promise<TextHit[]> {
   try {
     const lines: TextHit[] = [];
     const passes = [
-      { plate: compositeOnWhite(raster), mode: "3" },
-      ...ocrPlates(raster).map((plate) => ({ plate, mode: "11" })),
+      { plate: compositeOnWhite(raster), mode: PSM.AUTO },
+      ...ocrPlates(raster).map((plate) => ({ plate, mode: PSM.SPARSE_TEXT })),
     ];
     for (const pass of passes) {
       await worker.setParameters({ tessedit_pageseg_mode: pass.mode, user_defined_dpi: "96" });

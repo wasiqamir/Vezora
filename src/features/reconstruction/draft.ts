@@ -176,10 +176,13 @@ function textObject(hit: TextHit, index: number): ProjectObject {
     letterSpacing: 0,
     lineHeight: 1.16,
     textAlign: "left",
-    ...(Number.isFinite(hit.confidence)
-      ? { confidence: Math.max(0, Math.min(100, Math.round(hit.confidence))) }
-      : {}),
+    ...confidenceField(hit.confidence),
   };
+}
+
+function confidenceField(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return {};
+  return { confidence: Math.max(0, Math.min(100, Math.round(value))) };
 }
 
 function colorsFrom(paths: ProjectObject[], study: ImageStudy) {
