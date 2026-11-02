@@ -8,7 +8,7 @@ import { signUpAction } from "@/features/account/actions";
 
 export const metadata = {
   title: "Create account — Vezora",
-  description: "Create a Vezora account and open a blank logo.",
+  description: "Create a Vezora account and return to the homepage.",
 };
 
 export default function SignUpPage({
@@ -36,7 +36,7 @@ async function SignUpForm({ searchParams }: { searchParams: Promise<{ error?: st
   return (
     <AuthFrame
       title="Start a logo."
-      lede="Create an account and a blank artboard opens straight away."
+      lede="Create an account and you'll land on the Vezora homepage."
       switcher={
         <>
           Already registered?{" "}

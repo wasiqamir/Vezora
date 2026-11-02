@@ -8,32 +8,23 @@ import { getPrisma } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 import { createBlankProject } from "@/features/projects/store";
 
-function safeCallback(value: FormDataEntryValue | null) {
-  const callback = String(value ?? "/dashboard");
-  if (!callback.startsWith("/") || callback.startsWith("//")) return "/dashboard";
-  return callback;
-}
+const homePath = "/";
 
 export async function signInAction(formData: FormData) {
-  const callback = safeCallback(formData.get("callbackUrl"));
   try {
     const destination = await signIn("credentials", {
       email: formData.get("email"),
       password: formData.get("password"),
       redirect: false,
-      redirectTo: callback,
+      redirectTo: homePath,
     });
-    if (signInFailed(destination)) {
-      redirect(`/sign-in?error=1&callbackUrl=${encodeURIComponent(callback)}`);
-    }
+    if (signInFailed(destination)) redirect("/sign-in?error=1");
   } catch (error) {
     unstable_rethrow(error);
-    if (error instanceof AuthError) {
-      redirect(`/sign-in?error=1&callbackUrl=${encodeURIComponent(callback)}`);
-    }
+    if (error instanceof AuthError) redirect("/sign-in?error=1");
     throw error;
   }
-  redirect(callback);
+  redirect(homePath);
 }
 
 export async function signUpAction(formData: FormData) {
@@ -59,14 +50,13 @@ export async function signUpAction(formData: FormData) {
     }
     throw error;
   }
-  const project = await createBlankProject(user.id);
-  const editorPath = `/editor/${project.id}`;
+  await createBlankProject(user.id);
   try {
     const destination = await signIn("credentials", {
       email,
       password,
       redirect: false,
-      redirectTo: editorPath,
+      redirectTo: homePath,
     });
     if (signInFailed(destination)) redirect("/sign-in?error=1");
   } catch (error) {
@@ -74,7 +64,7 @@ export async function signUpAction(formData: FormData) {
     if (error instanceof AuthError) redirect("/sign-in?error=1");
     throw error;
   }
-  redirect(editorPath);
+  redirect(homePath);
 }
 
 function signInFailed(destination: unknown) {

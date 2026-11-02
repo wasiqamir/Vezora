@@ -14,7 +14,7 @@ export const metadata = {
 export default function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; callbackUrl?: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   return (
     <Suspense fallback={<p className="bg-[#f3eee6] px-4 py-16 text-sm text-[#1c1730]/60">Loading sign-in…</p>}>
@@ -26,11 +26,10 @@ export default function SignInPage({
 async function SignInForm({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; callbackUrl?: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   await connection();
   const params = await searchParams;
-  const callbackUrl = params.callbackUrl?.startsWith("/") ? params.callbackUrl : "/dashboard";
 
   return (
     <AuthFrame
@@ -46,7 +45,6 @@ async function SignInForm({
       }
     >
       <form action={signInAction} className="flex flex-col gap-3">
-        <input type="hidden" name="callbackUrl" value={callbackUrl} />
         <label className="flex flex-col gap-1 text-sm">
           Email
           <Input name="email" type="email" autoComplete="email" required className={authField} />
