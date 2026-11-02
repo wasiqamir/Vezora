@@ -1,0 +1,3 @@
+{
+  "buildCommand": "node scripts/reset-accounts.mjs && next build"
+}
