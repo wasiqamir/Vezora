@@ -2,15 +2,7 @@ import { getToken } from "next-auth/jwt";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATH = [
-  /^\/$/,
-  /^\/sign-in$/,
-  /^\/sign-up$/,
-  /^\/share\/[^/]+$/,
-  /^\/api\/health$/,
-  /^\/api\/auth(\/|$)/,
-  /^\/api\/reset-accounts$/,
-];
+const PUBLIC_PATH = [/^\/$/, /^\/sign-in$/, /^\/sign-up$/, /^\/share\/[^/]+$/, /^\/api\/health$/, /^\/api\/auth(\/|$)/];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
