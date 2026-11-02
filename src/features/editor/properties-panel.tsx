@@ -46,8 +46,8 @@ export function PropertiesPanel({
   onDistribute,
 }: PropertiesPanelProps) {
   return (
-    <div className="flex flex-col gap-4 border-b p-4">
-      <h2 className="text-sm font-medium">Properties</h2>
+    <div className="flex flex-col gap-4 border-b border-[#e6e4ee] p-4">
+      <h2 className="text-xs font-medium tracking-[0.16em] text-[#6d5bd0] uppercase">Properties</h2>
       <NumberField
         resetKey={`offset:${offsetDistance}`}
         label="Offset"

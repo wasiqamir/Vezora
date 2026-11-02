@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { Geist, Geist_Mono } from "next/font/google";
 import { SiteHeader } from "@/components/site-header";
+import { SplashScreen } from "@/components/splash-screen";
 import { auth } from "@/lib/auth";
 import "./globals.css";
 
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
+        <SplashScreen />
         <Suspense fallback={<div className="h-14 border-b" />}>
           <SessionHeader />
         </Suspense>

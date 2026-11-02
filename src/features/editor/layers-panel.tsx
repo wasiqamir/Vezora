@@ -22,7 +22,7 @@ export function LayersPanel({
 }: LayersPanelProps) {
   return (
     <section className="flex flex-col gap-2 p-4">
-      <h2 className="text-sm font-medium">Layers</h2>
+      <h2 className="text-xs font-medium tracking-[0.16em] text-[#6d5bd0] uppercase">Layers</h2>
       <p className="text-xs text-muted-foreground">The top of the list is in front.</p>
       <p className="text-xs text-muted-foreground">
         Ctrl+Z undoes. Arrows nudge. Shift moves 10px.
@@ -37,7 +37,7 @@ export function LayersPanel({
                 type="button"
                 className={cn(
                   "min-w-0 flex-1 truncate rounded-md px-2 py-1 text-left text-sm",
-                  layer.selected ? "bg-muted font-medium" : "hover:bg-muted/60",
+                  layer.selected ? "bg-[#efeafc] font-medium text-[#16141f]" : "hover:bg-[#f4f2ec]",
                   layer.visible ? "" : "text-muted-foreground",
                 )}
                 onClick={(event) => onSelect(layer.id, event.shiftKey)}

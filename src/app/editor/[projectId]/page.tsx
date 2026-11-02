@@ -25,11 +25,16 @@ async function EditorContent({ params }: { params: Promise<{ projectId: string }
   if (!session?.user?.id) redirect("/sign-in");
   if (projectId === "new") {
     return (
-      <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-4 px-4 py-16">
-        <h1 className="text-2xl font-semibold tracking-tight">New logo</h1>
-        <form action={startProject}>
-          <Button type="submit">Start blank</Button>
-        </form>
+      <main className="flex flex-1 items-center justify-center bg-[#f5f6f8] px-4 py-16 text-[#16141f]">
+        <div className="w-full max-w-sm rounded-3xl border border-[#e6e4ee] bg-white px-6 py-8 shadow-[0_10px_30px_rgba(22,20,31,0.04)]">
+          <p className="text-xs tracking-[0.18em] text-[#6d5bd0] uppercase">New logo</p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">Start with a blank artboard.</h1>
+          <form action={startProject} className="mt-6">
+            <Button type="submit" className="h-10 rounded-full bg-[#16141f] px-4 text-white hover:bg-[#2a2640]">
+              Start blank
+            </Button>
+          </form>
+        </div>
       </main>
     );
   }
@@ -38,7 +43,7 @@ async function EditorContent({ params }: { params: Promise<{ projectId: string }
   const fonts = getEditorFontSetup();
 
   return (
-    <main className={`${fonts.className} flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col`}>
+    <main className={`${fonts.className} fixed inset-0 flex min-h-0 flex-col overflow-hidden bg-[#f4f2ec]`}>
       <div className="flex min-h-0 w-full flex-1">
         <EditorShell
           projectId={project.id}

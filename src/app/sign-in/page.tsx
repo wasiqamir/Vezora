@@ -1,9 +1,15 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { connection } from "next/server";
-import { signInAction } from "@/features/account/actions";
-import { Button } from "@/components/ui/button";
+import { AuthFrame, authField, authSubmit } from "@/components/auth-frame";
+import { SubmitButton } from "@/components/submit-button";
 import { Input } from "@/components/ui/input";
+import { signInAction } from "@/features/account/actions";
+
+export const metadata = {
+  title: "Sign in — Vezora",
+  description: "Open the logos saved to your Vezora account.",
+};
 
 export default function SignInPage({
   searchParams,
@@ -11,7 +17,7 @@ export default function SignInPage({
   searchParams: Promise<{ error?: string; callbackUrl?: string }>;
 }) {
   return (
-    <Suspense fallback={<p className="px-4 py-10 text-sm text-muted-foreground">Loading sign-in…</p>}>
+    <Suspense fallback={<p className="bg-[#f3eee6] px-4 py-16 text-sm text-[#1c1730]/60">Loading sign-in…</p>}>
       <SignInForm searchParams={searchParams} />
     </Suspense>
   );
@@ -27,30 +33,41 @@ async function SignInForm({
   const callbackUrl = params.callbackUrl?.startsWith("/") ? params.callbackUrl : "/dashboard";
 
   return (
-    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 px-4 py-16">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-        <p className="text-sm text-muted-foreground">Open the logos saved to your account.</p>
-      </div>
+    <AuthFrame
+      title="Welcome back."
+      lede="Open the marks saved to your account and keep drawing."
+      switcher={
+        <>
+          Need an account?{" "}
+          <Link href="/sign-up" className="font-medium text-[#1c1730] underline-offset-4 hover:underline">
+            Create one
+          </Link>
+        </>
+      }
+    >
       <form action={signInAction} className="flex flex-col gap-3">
         <input type="hidden" name="callbackUrl" value={callbackUrl} />
         <label className="flex flex-col gap-1 text-sm">
           Email
-          <Input name="email" type="email" autoComplete="email" required />
+          <Input name="email" type="email" autoComplete="email" required className={authField} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           Password
-          <Input name="password" type="password" autoComplete="current-password" required />
+          <Input
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            className={authField}
+          />
         </label>
-        {params.error ? <p className="text-sm text-destructive">Invalid email or password.</p> : null}
-        <Button type="submit">Sign in</Button>
+        {params.error ? (
+          <p role="alert" className="text-sm text-[#9f1239]">
+            That email and password do not match an account.
+          </p>
+        ) : null}
+        <SubmitButton idle="Sign in" pending="Signing in…" className={authSubmit} />
       </form>
-      <p className="text-sm text-muted-foreground">
-        Need an account?{" "}
-        <Link href="/sign-up" className="text-foreground underline">
-          Sign up
-        </Link>
-      </p>
-    </main>
+    </AuthFrame>
   );
 }

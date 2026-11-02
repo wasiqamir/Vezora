@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { VezoraMark } from "@/components/vezora-mark";
+import { cn } from "@/lib/utils";
 import { initialEditorSnapshot } from "@/features/editor/artboard";
 import { CanvasController } from "@/features/editor/canvas-controller";
 import { EditorFooter } from "@/features/editor/editor-footer";
@@ -15,12 +17,17 @@ import type { ProjectDocument } from "@/features/projects/document";
 import type { EditorFontOption, EditorSnapshot } from "@/features/editor/types";
 
 const CHECKERBOARD = {
-  backgroundColor: "#ececec",
+  backgroundColor: "#f3f1ec",
   backgroundImage:
-    "linear-gradient(45deg, #d7d7d7 25%, transparent 25%), linear-gradient(-45deg, #d7d7d7 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #d7d7d7 75%), linear-gradient(-45deg, transparent 75%, #d7d7d7 75%)",
+    "linear-gradient(45deg, #e4e0d6 25%, transparent 25%), linear-gradient(-45deg, #e4e0d6 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e4e0d6 75%), linear-gradient(-45deg, transparent 75%, #e4e0d6 75%)",
   backgroundSize: "24px 24px",
   backgroundPosition: "0 0, 0 12px, 12px -12px, -12px 0",
 } as const;
+
+const quiet =
+  "h-9 shrink-0 rounded-full border-[#d9d6e3] bg-white px-3 text-[#16141f] hover:bg-[#f4f2ec]";
+const primary =
+  "h-9 shrink-0 rounded-full bg-[#16141f] px-4 text-white hover:bg-[#2a2640]";
 
 export function EditorWorkspace({
   projectId,
@@ -179,33 +186,36 @@ export function EditorWorkspace({
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b px-3">
-        <Link href="/dashboard" className={buttonVariants({ variant: "outline" })}>
-          Projects
+    <div className="flex h-full min-h-0 w-full flex-col bg-[#f4f2ec] text-[#16141f]">
+      <header className="flex h-14 shrink-0 items-center gap-3 overflow-x-auto border-b border-[#e6e4ee] bg-white px-3">
+        <Link href="/dashboard" className="flex shrink-0 items-center gap-2" aria-label="Back to your logos">
+          <VezoraMark className="h-7 w-10" />
+          <span className="hidden text-sm font-semibold tracking-tight sm:inline">Vezora</span>
         </Link>
+        <span className="hidden h-5 w-px shrink-0 bg-[#e6e4ee] sm:block" aria-hidden="true" />
         <input
           aria-label="Project name"
           value={name}
-          className="h-8 min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 font-medium outline-none focus:border-input"
+          className="h-9 min-w-28 max-w-xs flex-1 rounded-full border border-transparent bg-[#f5f6f8] px-3 text-sm font-medium outline-none focus:border-[#6d5bd0] focus:bg-white"
           onChange={(event) => setName(event.target.value)}
           onBlur={() => void rename(name)}
           onKeyDown={(event) => {
             if (event.key === "Enter") event.currentTarget.blur();
           }}
         />
-        <p className="shrink-0 text-sm text-muted-foreground" role="status">
-          {saveState === "saving" ? "Saving…" : saveState === "failed" ? "Save failed" : "Saved"}
+        <p className="shrink-0 text-xs text-[#16141f]/55" role="status">
+          {saveState === "saving" ? "Saving…" : saveState === "failed" ? "Not saved" : "Saved"}
         </p>
         {saveState === "failed" ? (
-          <Button type="button" variant="outline" onClick={() => void persist(snapshot.revision)}>
+          <Button type="button" variant="outline" className={quiet} onClick={() => void persist(snapshot.revision)}>
             Retry
           </Button>
         ) : null}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <Button
             type="button"
             variant="outline"
+            className={quiet}
             disabled={!snapshot.canUndo}
             onClick={() => void controllerRef.current?.undo()}
           >
@@ -214,6 +224,7 @@ export function EditorWorkspace({
           <Button
             type="button"
             variant="outline"
+            className={quiet}
             disabled={!snapshot.canRedo}
             onClick={() => void controllerRef.current?.redo()}
           >
@@ -222,6 +233,7 @@ export function EditorWorkspace({
           <Button
             type="button"
             variant="outline"
+            className={quiet}
             disabled={!snapshot.ready || Boolean(bootError)}
             onClick={() => setReconstructOpen(true)}
           >
@@ -229,7 +241,7 @@ export function EditorWorkspace({
           </Button>
           <Button
             type="button"
-            variant="outline"
+            className={primary}
             disabled={!snapshot.ready || Boolean(bootError)}
             onClick={() => setExportOpen(true)}
           >
@@ -326,7 +338,7 @@ export function EditorWorkspace({
         />
         <div className="relative flex min-w-0 flex-1">
           {compare === "side" && sourceAssetId ? (
-            <aside className="flex w-52 shrink-0 flex-col gap-2 border-r bg-background p-3">
+            <aside className="flex w-52 shrink-0 flex-col gap-2 border-r border-[#e6e4ee] bg-white p-3">
               <p className="text-sm font-medium">Original</p>
               {/* The reconstruction upload is served only to the signed-in owner. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -339,10 +351,10 @@ export function EditorWorkspace({
           <div className="relative min-w-0 flex-1">
           {sourceAssetId ? (
             <div className="absolute top-3 left-3 z-20 flex gap-2">
-              <Button type="button" size="sm" variant={compare === "overlay" ? "default" : "outline"} onClick={() => setCompare("overlay")}>
+              <Button type="button" className={cn(compare === "overlay" ? primary : quiet)} onClick={() => setCompare("overlay")}>
                 Overlay
               </Button>
-              <Button type="button" size="sm" variant={compare === "side" ? "default" : "outline"} onClick={() => setCompare("side")}>
+              <Button type="button" className={cn(compare === "side" ? primary : quiet)} onClick={() => setCompare("side")}>
                 Side by side
               </Button>
             </div>
@@ -388,7 +400,7 @@ export function EditorWorkspace({
             />
           </div>
           {bootError ? (
-            <div className="absolute inset-0 z-10 grid place-items-center gap-3 bg-background/90 p-6 text-center">
+            <div className="absolute inset-0 z-10 grid place-items-center gap-3 bg-[#f4f2ec]/90 p-6 text-center">
               <p className="text-sm font-medium">The canvas could not start.</p>
               <p className="max-w-sm text-sm text-muted-foreground">{bootError}</p>
               <Button
@@ -403,19 +415,14 @@ export function EditorWorkspace({
             </div>
           ) : null}
           {!bootError && !snapshot.ready ? (
-            <div className="absolute inset-0 z-10 grid place-items-center bg-background/80 text-sm text-muted-foreground">
+            <div className="absolute inset-0 z-10 grid place-items-center bg-[#f4f2ec]/80 text-sm text-[#16141f]/60">
               Opening the editor…
             </div>
-          ) : null}
-          {!bootError && snapshot.ready && snapshot.layers.length === 0 && !snapshot.error ? (
-            <p className="pointer-events-none absolute inset-0 z-10 grid place-items-center text-sm text-muted-foreground">
-              The artboard is empty.
-            </p>
           ) : null}
           {snapshot.error ? (
             <div
               role="alert"
-              className="absolute top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-lg border bg-background px-3 py-2 text-sm shadow-sm"
+              className="absolute top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[#e6e4ee] bg-white px-3 py-2 text-sm shadow-sm"
             >
               <span>{snapshot.error}</span>
               <Button
@@ -429,7 +436,7 @@ export function EditorWorkspace({
           ) : null}
           </div>
         </div>
-        <aside className="flex min-h-0 w-80 shrink-0 flex-col overflow-y-auto border-l max-sm:w-48">
+        <aside className="flex min-h-0 w-80 shrink-0 flex-col overflow-y-auto border-l border-[#e6e4ee] bg-white [scrollbar-width:thin] max-sm:w-52">
           <PropertiesPanel
             fonts={fonts}
             selection={snapshot.selection}

@@ -1,9 +1,15 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { connection } from "next/server";
-import { signUpAction } from "@/features/account/actions";
-import { Button } from "@/components/ui/button";
+import { AuthFrame, authField, authSubmit } from "@/components/auth-frame";
+import { SubmitButton } from "@/components/submit-button";
 import { Input } from "@/components/ui/input";
+import { signUpAction } from "@/features/account/actions";
+
+export const metadata = {
+  title: "Create account — Vezora",
+  description: "Create a Vezora account and open a blank logo.",
+};
 
 export default function SignUpPage({
   searchParams,
@@ -11,7 +17,7 @@ export default function SignUpPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   return (
-    <Suspense fallback={<p className="px-4 py-10 text-sm text-muted-foreground">Loading sign-up…</p>}>
+    <Suspense fallback={<p className="bg-[#f3eee6] px-4 py-16 text-sm text-[#1c1730]/60">Loading sign-up…</p>}>
       <SignUpForm searchParams={searchParams} />
     </Suspense>
   );
@@ -22,39 +28,54 @@ async function SignUpForm({ searchParams }: { searchParams: Promise<{ error?: st
   const params = await searchParams;
   const message =
     params.error === "exists"
-      ? "This email is already registered."
+      ? "This email already has an account. Sign in instead."
       : params.error === "invalid"
         ? "Use your name, a valid email, and a password of at least 8 characters."
         : null;
 
   return (
-    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 px-4 py-16">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Sign up</h1>
-        <p className="text-sm text-muted-foreground">Create an account, then start a blank logo.</p>
-      </div>
-      <form action={signUpAction} className="flex flex-col gap-3">
+    <AuthFrame
+      title="Start a logo."
+      lede="Create an account and a blank artboard opens straight away."
+      switcher={
+        <>
+          Already registered?{" "}
+          <Link href="/sign-in" className="font-medium text-[#1c1730] underline-offset-4 hover:underline">
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      <form action={signUpAction} className="flex flex-col gap-2.5">
         <label className="flex flex-col gap-1 text-sm">
           Name
-          <Input name="name" autoComplete="name" required />
+          <Input name="name" autoComplete="name" required className={authField} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           Email
-          <Input name="email" type="email" autoComplete="email" required />
+          <Input name="email" type="email" autoComplete="email" required className={authField} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          Password
-          <Input name="password" type="password" autoComplete="new-password" minLength={8} required />
+          <span className="flex items-baseline justify-between gap-3">
+            <span>Password</span>
+            <span className="text-xs font-normal text-[#1c1730]/50">At least 8 characters</span>
+          </span>
+          <Input
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            minLength={8}
+            required
+            className={authField}
+          />
         </label>
-        {message ? <p className="text-sm text-destructive">{message}</p> : null}
-        <Button type="submit">Create account</Button>
+        {message ? (
+          <p role="alert" className="text-sm text-[#9f1239]">
+            {message}
+          </p>
+        ) : null}
+        <SubmitButton idle="Create account" pending="Starting your logo…" className={authSubmit} />
       </form>
-      <p className="text-sm text-muted-foreground">
-        Already registered?{" "}
-        <Link href="/sign-in" className="text-foreground underline">
-          Sign in
-        </Link>
-      </p>
-    </main>
+    </AuthFrame>
   );
 }

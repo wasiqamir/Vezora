@@ -98,7 +98,8 @@ export function Toolbar({
   const hasSelection = selectionCount > 0;
 
   return (
-    <div className="grid min-h-0 w-[7.5rem] shrink-0 grid-cols-2 content-start gap-0.5 overflow-y-auto border-r p-1">
+    <div className="flex min-h-0 w-[9.25rem] shrink-0 flex-col gap-3 overflow-y-auto border-r border-[#e6e4ee] bg-white px-2 py-3 [scrollbar-width:thin]">
+      <ToolGroup label="Draw">
         <ToolButton label="Select" purpose="Move, resize, or rotate what is on the canvas." icon={<MousePointer2 />} pressed={tool === "select"} onClick={() => onTool("select")} />
         <ToolButton
           label="Pen"
@@ -114,6 +115,8 @@ export function Toolbar({
           pressed={tool === "nodes"}
           onClick={() => onTool("nodes")}
         />
+      </ToolGroup>
+      <ToolGroup label="Add">
         <ToolButton label="Text" purpose="Add a word or a name." icon={<Type />} onClick={onAddText} />
         <ToolButton label="Circle" purpose="Add a circle for a head, eye, or button." icon={<Circle />} onClick={onAddCircle} />
         <ToolButton label="Round" purpose="Add a rectangle with soft corners." icon={<Squircle />} onClick={onAddRoundRect} />
@@ -133,7 +136,7 @@ export function Toolbar({
             onClick={onToggleIcons}
           />
           {iconPickerOpen ? (
-            <div className="absolute top-0 left-full z-20 ml-2 w-56 rounded-xl border bg-background p-2 shadow-md">
+            <div className="absolute top-0 left-full z-20 ml-2 w-56 rounded-2xl border border-[#e6e4ee] bg-white p-2 shadow-[0_16px_40px_rgba(22,20,31,0.12)]">
               <p className="px-1 text-xs font-medium">Icons</p>
               <p className="px-1 pb-2 text-[11px] text-muted-foreground">
                 Simple symbols. Draw a character from the shapes.
@@ -160,6 +163,8 @@ export function Toolbar({
           ) : null}
         </div>
         <ToolButton label="Image" purpose="Place a PNG, JPG, or SVG." icon={<ImageIcon />} onClick={onAddImage} />
+      </ToolGroup>
+      <ToolGroup label="Combine">
         <ToolButton
           label="Unite"
           purpose="Merge the selected shapes into one."
@@ -202,6 +207,8 @@ export function Toolbar({
           disabled={!hasSelection}
           onClick={onOutline}
         />
+      </ToolGroup>
+      <ToolGroup label="Bring in">
         <ToolButton
           label="Trace"
           purpose="Turn a picture into shapes."
@@ -214,6 +221,8 @@ export function Toolbar({
           icon={<FileUp />}
           onClick={onImportSvg}
         />
+      </ToolGroup>
+      <ToolGroup label="Arrange">
         <ToolButton
           label="Flip H"
           purpose="Mirror the selection left to right."
@@ -242,7 +251,17 @@ export function Toolbar({
           disabled={!hasSelection}
           onClick={onDelete}
         />
+      </ToolGroup>
     </div>
+  );
+}
+
+function ToolGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-1">
+      <p className="px-1 text-[10px] font-medium tracking-[0.14em] text-[#6d5bd0] uppercase">{label}</p>
+      <div className="grid grid-cols-2 gap-1">{children}</div>
+    </section>
   );
 }
 
@@ -265,9 +284,10 @@ function ToolButton({
     <HoverTip purpose={purpose}>
       <Button
         type="button"
-        variant={pressed ? "secondary" : "ghost"}
+        variant="ghost"
         className={cn(
-          "h-auto w-full flex-col gap-0 px-0.5 py-0.5 text-[10px] leading-none whitespace-normal [&_svg]:size-3.5",
+          "h-auto w-full flex-col gap-1 rounded-xl px-1 py-1.5 text-[11px] leading-none font-medium whitespace-normal text-[#16141f] hover:bg-[#f4f2ec] [&_svg]:size-4",
+          pressed && "bg-[#16141f] text-white hover:bg-[#2a2640]",
         )}
         aria-pressed={pressed}
         aria-label={`${label}. ${purpose}`}
@@ -294,15 +314,13 @@ function HoverTip({ purpose, children }: { purpose: string; children: ReactNode 
       className="block"
       onMouseEnter={(event) => place(event.currentTarget)}
       onMouseLeave={() => setTip(null)}
-      onFocus={(event) => place(event.currentTarget)}
-      onBlur={() => setTip(null)}
     >
       {children}
       {tip
         ? createPortal(
             <span
               role="tooltip"
-              className="pointer-events-none fixed z-50 max-w-56 -translate-y-1/2 rounded-md border bg-background px-2 py-1 text-left text-xs leading-snug text-foreground shadow-md"
+              className="pointer-events-none fixed z-50 max-w-56 -translate-y-1/2 rounded-xl border border-[#e6e4ee] bg-white px-2.5 py-1.5 text-left text-xs leading-snug text-[#16141f] shadow-md"
               style={{ top: tip.top, left: tip.left }}
             >
               {purpose}

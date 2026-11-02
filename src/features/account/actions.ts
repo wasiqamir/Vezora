@@ -1,7 +1,7 @@
 "use server";
 
 import { AuthError } from "next-auth";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { Prisma } from "@/generated/prisma/client";
 import { auth, signIn, signOut } from "@/lib/auth";
 import { getPrisma } from "@/lib/db";
@@ -17,17 +17,23 @@ function safeCallback(value: FormDataEntryValue | null) {
 export async function signInAction(formData: FormData) {
   const callback = safeCallback(formData.get("callbackUrl"));
   try {
-    await signIn("credentials", {
+    const destination = await signIn("credentials", {
       email: formData.get("email"),
       password: formData.get("password"),
+      redirect: false,
       redirectTo: callback,
     });
+    if (signInFailed(destination)) {
+      redirect(`/sign-in?error=1&callbackUrl=${encodeURIComponent(callback)}`);
+    }
   } catch (error) {
+    unstable_rethrow(error);
     if (error instanceof AuthError) {
       redirect(`/sign-in?error=1&callbackUrl=${encodeURIComponent(callback)}`);
     }
     throw error;
   }
+  redirect(callback);
 }
 
 export async function signUpAction(formData: FormData) {
@@ -54,12 +60,25 @@ export async function signUpAction(formData: FormData) {
     throw error;
   }
   const project = await createBlankProject(user.id);
+  const editorPath = `/editor/${project.id}`;
   try {
-    await signIn("credentials", { email, password, redirectTo: `/editor/${project.id}` });
+    const destination = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+      redirectTo: editorPath,
+    });
+    if (signInFailed(destination)) redirect("/sign-in?error=1");
   } catch (error) {
+    unstable_rethrow(error);
     if (error instanceof AuthError) redirect("/sign-in?error=1");
     throw error;
   }
+  redirect(editorPath);
+}
+
+function signInFailed(destination: unknown) {
+  return typeof destination === "string" && /[?&]error=/.test(destination);
 }
 
 export async function signOutAction() {

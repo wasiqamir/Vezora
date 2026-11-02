@@ -128,6 +128,8 @@ export class CanvasController {
   private offsetDistance = 28;
   private revision = 0;
   private openStarted = false;
+  private userAdjustedZoom = false;
+  private readonly host: HTMLElement;
   private reconstruction: ProjectDocument["reconstruction"] | null = null;
   private imageUrls = new Set<string>();
   private suppressRevision = false;
@@ -148,6 +150,7 @@ export class CanvasController {
     tool?: "select" | "pen";
   }) {
     this.fonts = input.fonts;
+    this.host = input.host;
     this.openTool = input.tool === "pen" ? "pen" : "select";
     this.initialDocument = input.document ?? null;
     this.reconstruction = input.document?.reconstruction ?? null;
@@ -198,6 +201,7 @@ export class CanvasController {
       event.preventDefault();
       event.stopPropagation();
       const next = clamp(this.canvas.getZoom() * 0.999 ** event.deltaY, MIN_ZOOM, MAX_ZOOM);
+      this.userAdjustedZoom = true;
       this.canvas.zoomToPoint(options.viewportPoint, next);
       const percent = Math.round(next * 100);
       if (percent === this.zoomPercent) return;
@@ -801,6 +805,7 @@ export class CanvasController {
   }
 
   zoomBy(factor: number) {
+    this.userAdjustedZoom = true;
     const next = clamp(this.canvas.getZoom() * factor, MIN_ZOOM, MAX_ZOOM);
     const center = this.artboard.getCenterPoint();
     const screen = new Point(center.x, center.y).transform(this.canvas.viewportTransform);
@@ -810,10 +815,11 @@ export class CanvasController {
   }
 
   fit() {
+    this.userAdjustedZoom = false;
     const width = this.canvas.getWidth();
     const height = this.canvas.getHeight();
     if (width < 2 || height < 2) return;
-    const pad = 48;
+    const pad = Math.min(48, Math.max(12, Math.round(Math.min(width, height) * 0.08)));
     const zoom = clamp(
       Math.min(
         (width - pad * 2) / (this.artboard.width || 1),
@@ -1114,12 +1120,14 @@ export class CanvasController {
     if (width < 2 || height < 2) return;
     this.canvas.setDimensions({ width, height });
     if (!this.ready) {
-      if (this.openStarted) return;
-      this.openStarted = true;
-      void this.finishOpen();
+      if (!this.openStarted) {
+        this.openStarted = true;
+        void this.finishOpen();
+      }
       return;
     }
-    this.canvas.requestRenderAll();
+    if (!this.userAdjustedZoom) this.fit();
+    else this.canvas.requestRenderAll();
   }
 
   private async finishOpen() {
@@ -1131,7 +1139,7 @@ export class CanvasController {
       }
       this.history.reset(this.serialize());
       this.ready = true;
-      this.fit();
+      this.resize(this.host);
       if (this.openTool === "pen") await this.setTool("pen");
     } catch {
       this.error = "The project could not be opened.";
