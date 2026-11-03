@@ -27,7 +27,7 @@ async function ShareContent({ params }: { params: Promise<{ token: string }> }) 
             <p className="text-sm text-muted-foreground">Shared from Vezora</p>
             <h1 className="text-2xl font-semibold tracking-tight">{design.name}</h1>
           </div>
-          <DesignPreview document={design.document} label={design.name} />
+          <DesignPreview document={design.document} imageUrl={design.imageUrl} label={design.name} />
           <p className="text-sm text-muted-foreground">This is a view of the current design. Editing stays with the owner.</p>
           <Link href="/sign-up" className={buttonVariants({ className: "w-fit" })}>
             Create your own

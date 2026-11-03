@@ -70,7 +70,7 @@ async function AccountContent() {
                 key={design.id}
                 className="flex flex-col overflow-hidden rounded-2xl border border-[#e6e4ee] bg-white shadow-[0_10px_30px_rgba(22,20,31,0.04)]"
               >
-                <DesignPreview document={design.document} label={design.name} framed />
+                <DesignPreview document={design.document} imageUrl={design.imageUrl} label={design.name} framed />
                 <div className="flex flex-1 flex-col px-4 py-3.5">
                   <h2 className="font-medium">{design.name}</h2>
                   <p className="mt-1 text-xs text-[#16141f]/50">

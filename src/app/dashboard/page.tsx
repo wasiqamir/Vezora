@@ -47,7 +47,15 @@ async function DashboardContent({
   const params = await searchParams;
   const query = params.query?.trim() ?? "";
   const firstName = session.user.name?.trim().split(/\s+/)[0];
-  let projects: { id: string; name: string; updatedAt: Date; previewSvg: string; width: number; height: number }[] = [];
+  let projects: {
+    id: string;
+    name: string;
+    updatedAt: Date;
+    imageUrl: string | null;
+    previewSvg: string;
+    width: number;
+    height: number;
+  }[] = [];
   let failed = false;
   try {
     projects = await listProjectPreviews(session.user.id, query);
@@ -134,6 +142,7 @@ async function DashboardContent({
                   id: project.id,
                   name: project.name,
                   updatedAt: project.updatedAt.toISOString(),
+                  imageUrl: project.imageUrl,
                   previewSvg: project.previewSvg,
                   width: project.width,
                   height: project.height,

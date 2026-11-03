@@ -58,6 +58,8 @@ model Project {
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
   shareToken    String?   @unique
+  imageUrl      String?
+  imageStoredAt DateTime?
   versions      ProjectVersion[]
   assets        Asset[]
   jobs          ReconstructionJob[]
@@ -72,6 +74,7 @@ model ProjectVersion {
   number    Int
   document  Json
   source    VersionSource
+  imageUrl  String?
   createdAt DateTime      @default(now())
   jobs      ReconstructionJob[]
 

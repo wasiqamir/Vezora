@@ -4,14 +4,30 @@ import type { ProjectDocument } from "@/features/projects/document";
 export function DesignPreview({
   document,
   label,
+  imageUrl,
   framed = false,
   frameClassName = "h-44",
 }: {
   document: ProjectDocument;
   label: string;
+  imageUrl?: string | null;
   framed?: boolean;
   frameClassName?: string;
 }) {
+  if (imageUrl) {
+    return (
+      <div
+        className={
+          framed
+            ? `flex items-center justify-center bg-[#f4f2ec] px-6 ${frameClassName}`
+            : "w-full overflow-hidden rounded-lg bg-muted"
+        }
+        style={framed ? undefined : { aspectRatio: `${document.artboard.width} / ${document.artboard.height}` }}
+      >
+        <img src={imageUrl} alt={label} className="max-h-full max-w-full object-contain" />
+      </div>
+    );
+  }
   const svg = templatePreviewSvg(document);
   if (framed) {
     return (

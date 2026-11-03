@@ -91,6 +91,7 @@ async function AccountDesignContent({
           <div className="overflow-hidden rounded-2xl border border-[#e6e4ee]">
             <DesignPreview
               document={preview.document}
+              imageUrl={preview.imageUrl}
               label={`${design.name}, save ${preview.number}`}
               framed
               frameClassName="h-80 sm:h-[28rem]"

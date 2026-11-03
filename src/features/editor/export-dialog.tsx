@@ -20,10 +20,12 @@ const CHECKERBOARD = {
 } as const;
 
 export function ExportDialog({
+  projectId,
   projectName,
   onExport,
   onClose,
 }: {
+  projectId: string;
   projectName: string;
   onExport: (request: ExportRequest) => Promise<ExportFile>;
   onClose: () => void;
@@ -111,6 +113,9 @@ export function ExportDialog({
       anchor.download = file.filename;
       anchor.click();
       URL.revokeObjectURL(url);
+      const body = new FormData();
+      body.set("file", file.blob, file.filename);
+      void fetch(`/api/projects/${projectId}/image`, { method: "POST", body });
       setWaiting(false);
     } catch {
       if (requestId.current !== id) return;

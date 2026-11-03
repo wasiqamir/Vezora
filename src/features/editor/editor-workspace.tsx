@@ -29,6 +29,19 @@ const quiet =
 const primary =
   "h-9 shrink-0 rounded-full bg-[#16141f] px-4 text-white hover:bg-[#2a2640]";
 
+function blobToBase64(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = typeof reader.result === "string" ? reader.result.split(",")[1] : "";
+      if (!value) reject(new Error("image"));
+      else resolve(value);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("image"));
+    reader.readAsDataURL(blob);
+  });
+}
+
 export function EditorWorkspace({
   projectId,
   projectName,
@@ -63,6 +76,9 @@ export function EditorWorkspace({
   const savedRevision = useRef(0);
   const savingRef = useRef(false);
   const pendingRevision = useRef<number | null>(null);
+  const nameRef = useRef(projectName);
+  const lastImageAt = useRef(0);
+  nameRef.current = name;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -99,11 +115,30 @@ export function EditorWorkspace({
     if (!controller) return;
     savingRef.current = true;
     setSaveState("saving");
-    void fetch(`/api/projects/${projectId}/document`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ document: controller.projectDocument(), source: "autosave" }),
-    })
+    void (async () => {
+      let image: string | undefined;
+      if (Date.now() - lastImageAt.current > 60_000) {
+        try {
+          const file = await controller.createExport({
+            projectName: nameRef.current,
+            format: "png",
+            scale: 1,
+            background: "artboard",
+          });
+          if (file.blob.size <= 2_500_000) {
+            image = await blobToBase64(file.blob);
+            lastImageAt.current = Date.now();
+          }
+        } catch {
+          image = undefined;
+        }
+      }
+      return fetch(`/api/projects/${projectId}/document`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ document: controller.projectDocument(), source: "autosave", image }),
+      });
+    })()
       .then((response) => {
         if (!response.ok) throw new Error("Save failed.");
         savedRevision.current = Math.max(savedRevision.current, revision);
@@ -479,6 +514,7 @@ export function EditorWorkspace({
       ) : null}
       {exportOpen ? (
         <ExportDialog
+          projectId={projectId}
           projectName={projectName}
           onClose={() => setExportOpen(false)}
           onExport={(request) => {

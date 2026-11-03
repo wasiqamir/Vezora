@@ -10,6 +10,7 @@ import {
   ProjectDocumentError,
 } from "@/features/projects/document";
 import { templatePreviewSvg } from "@/features/templates/preview";
+import { uploadLogoFile, type LogoFile } from "@/features/assets/logo-image";
 import { getPrisma } from "@/lib/db";
 
 const NAME_LIMIT = 80;
@@ -48,6 +49,7 @@ export async function listProjectPreviews(ownerId: string, query: string) {
       id: true,
       name: true,
       updatedAt: true,
+      imageUrl: true,
       versions: {
         orderBy: { number: "desc" },
         take: 1,
@@ -65,6 +67,7 @@ export async function listProjectPreviews(ownerId: string, query: string) {
           id: project.id,
           name: project.name,
           updatedAt: project.updatedAt,
+          imageUrl: project.imageUrl,
           previewSvg: templatePreviewSvg(document),
           width: document.artboard.width,
           height: document.artboard.height,
@@ -77,6 +80,7 @@ export async function listProjectPreviews(ownerId: string, query: string) {
             id: project.id,
             name: project.name,
             updatedAt: project.updatedAt,
+            imageUrl: project.imageUrl,
             previewSvg: "",
             width: 1,
             height: 1,
@@ -219,17 +223,49 @@ export async function appendProjectVersion(
   });
 }
 
+const IMAGE_GAP_MS = 45_000;
+
+async function rememberLogoImage(projectId: string, versionNumber: number, url: string) {
+  const prisma = getPrisma();
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { imageUrl: url, imageStoredAt: new Date() },
+  });
+  await prisma.projectVersion.updateMany({
+    where: { projectId, number: versionNumber },
+    data: { imageUrl: url },
+  });
+}
+
+export async function storeProjectLogo(ownerId: string, projectId: string, file: LogoFile) {
+  const prisma = getPrisma();
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, ownerId, deletedAt: null },
+    select: {
+      id: true,
+      versions: { orderBy: { number: "desc" }, take: 1, select: { number: true } },
+    },
+  });
+  const version = project?.versions[0];
+  if (!project || !version) return null;
+  const url = await uploadLogoFile(projectId, file);
+  if (!url) return "";
+  await rememberLogoImage(projectId, version.number, url);
+  return url;
+}
+
 export async function saveProjectDocument(
   ownerId: string,
   projectId: string,
   document: ProjectDocument,
   source: Extract<VersionSource, "save" | "autosave">,
+  image?: LogoFile | null,
 ) {
   const prisma = getPrisma();
-  return prisma.$transaction(async (tx) => {
+  const saved = await prisma.$transaction(async (tx) => {
     const project = await tx.project.findFirst({
       where: { id: projectId, ownerId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, imageStoredAt: true },
     });
     if (!project) return null;
     const latest = await tx.projectVersion.findFirst({
@@ -246,12 +282,31 @@ export async function saveProjectDocument(
         source,
       },
     });
-    return tx.project.update({
+    const updated = await tx.project.update({
       where: { id: projectId },
       data: { schemaVersion: document.schemaVersion },
       select: { id: true, name: true, updatedAt: true },
     });
+    return { ...updated, versionNumber: number, imageStoredAt: project.imageStoredAt };
   });
+  if (!saved) return null;
+  const recent =
+    saved.imageStoredAt != null && Date.now() - saved.imageStoredAt.getTime() < IMAGE_GAP_MS;
+  const snapshot =
+    image && (source === "save" || !recent)
+      ? image
+      : source === "save"
+        ? {
+            body: Buffer.from(templatePreviewSvg(document)),
+            mime: "image/svg+xml" as const,
+            filename: "logo.svg",
+          }
+        : null;
+  if (snapshot) {
+    const url = await uploadLogoFile(projectId, snapshot);
+    if (url) await rememberLogoImage(projectId, saved.versionNumber, url);
+  }
+  return { id: saved.id, name: saved.name, updatedAt: saved.updatedAt };
 }
 
 const HISTORY_LIMIT = 40;
@@ -266,6 +321,7 @@ export async function listAccountDesigns(ownerId: string) {
       name: true,
       updatedAt: true,
       shareToken: true,
+      imageUrl: true,
       _count: { select: { versions: true } },
       versions: {
         orderBy: { number: "desc" },
@@ -285,6 +341,7 @@ export async function listAccountDesigns(ownerId: string) {
           updatedAt: project.updatedAt,
           shared: Boolean(project.shareToken),
           saves: project._count.versions,
+          imageUrl: project.imageUrl,
           document: migrateDocument(latest.document),
         },
       ];
@@ -325,11 +382,16 @@ export async function getOwnedVersion(ownerId: string, projectId: string, versio
   const prisma = getPrisma();
   const version = await prisma.projectVersion.findFirst({
     where: { id: versionId, project: { id: projectId, ownerId, deletedAt: null } },
-    select: { id: true, number: true, document: true },
+    select: { id: true, number: true, document: true, imageUrl: true },
   });
   if (!version) return null;
   try {
-    return { id: version.id, number: version.number, document: migrateDocument(version.document) };
+    return {
+      id: version.id,
+      number: version.number,
+      imageUrl: version.imageUrl,
+      document: migrateDocument(version.document),
+    };
   } catch (error) {
     if (error instanceof ProjectDocumentError) return null;
     throw error;
@@ -370,6 +432,7 @@ export async function getSharedProject(token: string) {
     where: { shareToken: token, deletedAt: null },
     select: {
       name: true,
+      imageUrl: true,
       versions: {
         orderBy: { number: "desc" },
         take: 1,
@@ -380,7 +443,7 @@ export async function getSharedProject(token: string) {
   const latest = project?.versions[0];
   if (!project || !latest) return null;
   try {
-    return { name: project.name, document: migrateDocument(latest.document) };
+    return { name: project.name, imageUrl: project.imageUrl, document: migrateDocument(latest.document) };
   } catch (error) {
     if (error instanceof ProjectDocumentError) return null;
     throw error;

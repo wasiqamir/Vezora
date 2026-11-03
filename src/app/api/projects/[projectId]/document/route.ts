@@ -3,11 +3,13 @@ import { z } from "zod";
 import { migrateDocument, ProjectDocumentError } from "@/features/projects/document";
 import { projectError, readJson, requireUserId } from "@/features/projects/http";
 import { isResourceId } from "@/features/reliability/limits";
+import { decodeLogoImage } from "@/features/assets/logo-image";
 import { saveProjectDocument } from "@/features/projects/store";
 
 const saveSchema = z.object({
   document: z.unknown(),
   source: z.enum(["save", "autosave"]),
+  image: z.string().max(3_500_000).optional(),
 });
 
 type Context = { params: Promise<{ projectId: string }> };
@@ -29,7 +31,8 @@ export async function PUT(request: Request, context: Context) {
   }
   const { projectId } = await context.params;
   if (!isResourceId(projectId)) return projectError("not_found", "That project was not found.", 404);
-  const project = await saveProjectDocument(userId, projectId, document, parsed.data.source);
+  const image = parsed.data.image ? decodeLogoImage(parsed.data.image) : null;
+  const project = await saveProjectDocument(userId, projectId, document, parsed.data.source, image);
   if (!project) return projectError("not_found", "That project was not found.", 404);
   return Response.json({
     project: { id: project.id, name: project.name, updatedAt: project.updatedAt.toISOString() },

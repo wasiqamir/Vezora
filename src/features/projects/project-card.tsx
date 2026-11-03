@@ -8,7 +8,15 @@ import { Input } from "@/components/ui/input";
 export function ProjectCard({
   project,
 }: {
-  project: { id: string; name: string; updatedAt: string; previewSvg?: string; width?: number; height?: number };
+  project: {
+    id: string;
+    name: string;
+    updatedAt: string;
+    imageUrl?: string | null;
+    previewSvg?: string;
+    width?: number;
+    height?: number;
+  };
 }) {
   const router = useRouter();
   const [renaming, setRenaming] = useState(false);
@@ -60,7 +68,11 @@ export function ProjectCard({
   return (
     <article className="flex flex-col overflow-hidden rounded-2xl border border-[#e6e4ee] bg-white shadow-[0_10px_30px_rgba(22,20,31,0.04)]">
       <a href={`/editor/${project.id}`} className="block">
-        {project.previewSvg ? (
+        {project.imageUrl ? (
+          <div className="flex h-44 items-center justify-center bg-[#f4f2ec] px-6">
+            <img src={project.imageUrl} alt={project.name} className="max-h-full max-w-full object-contain" />
+          </div>
+        ) : project.previewSvg ? (
           <div className="flex h-44 items-center justify-center bg-[#f4f2ec] px-6">
             <div
               className="h-full max-w-full [&_svg]:h-full [&_svg]:w-auto [&_svg]:max-w-full"
