@@ -675,6 +675,7 @@ export function EditorWorkspace({
             const controller = controllerRef.current;
             if (!controller) return;
             // Only file exports create a counted account logo/save — artboard edits stay silent.
+            // Always send a PNG when possible so Project.imageUrl + version preview are stored.
             let image: string | undefined;
             try {
               const file = await controller.createExport({
@@ -683,7 +684,10 @@ export function EditorWorkspace({
                 scale: 1,
                 background: "artboard",
               });
-              if (file.blob.size <= 2_500_000) image = await blobToBase64(file.blob);
+              if (file.blob.size > 0 && file.blob.size <= 2_500_000) {
+                image = await blobToBase64(file.blob);
+                lastImageAt.current = Date.now();
+              }
             } catch {
               image = undefined;
             }
@@ -693,7 +697,7 @@ export function EditorWorkspace({
               body: JSON.stringify({
                 document: controller.projectDocument(),
                 source: "save",
-                image,
+                ...(image ? { image } : {}),
               }),
             });
             if (!response.ok) throw new Error("Save failed.");

@@ -50,6 +50,17 @@ function shape(object: ProjectObject) {
     const scaleY = object.height / 100;
     return `<g transform="translate(${object.x} ${object.y}) scale(${scaleX} ${scaleY})">${paths}</g>`;
   }
+  // Edit-elements pieces are images with a clip path — draw the silhouette so account
+  // cards are not blank when imageUrl has not been uploaded yet.
+  if (object.type === "image" && object.path) {
+    const rule = object.fillRule === "evenodd" ? "evenodd" : "nonzero";
+    const ink = object.fill && object.fill !== "none" ? object.fill : "#e7e5e4";
+    return `<path d="${escapeXml(object.path)}" fill="${ink}" fill-rule="${rule}"/>`;
+  }
+  if (object.type === "image") {
+    const ink = object.fill && object.fill !== "none" ? object.fill : "#e7e5e4";
+    return `<rect x="${object.x}" y="${object.y}" width="${Math.max(1, object.width * (object.scaleX || 1))}" height="${Math.max(1, object.height * (object.scaleY || 1))}" fill="${ink}"/>`;
+  }
   return "";
 }
 

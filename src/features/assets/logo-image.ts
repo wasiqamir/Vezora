@@ -32,32 +32,63 @@ export function decodeLogoImage(value: string): LogoFile | null {
   return null;
 }
 
+/**
+ * Upload a logo preview to Cloudinary. Uses a data-URI payload so Node serverless
+ * FormData/Blob quirks cannot silently drop the file (which left imageUrl null).
+ */
 export async function uploadLogoFile(projectId: string, file: LogoFile) {
   const cloud = process.env.CLOUDINARY_CLOUD_NAME;
   const apiKey = process.env.CLOUDINARY_API_KEY;
   const apiSecret = process.env.CLOUDINARY_API_SECRET;
-  if (!cloud || !apiKey || !apiSecret) return null;
+  if (!cloud || !apiKey || !apiSecret) {
+    console.error("[logo-image] Cloudinary env vars are missing; preview imageUrl will not be stored.");
+    return null;
+  }
   const timestamp = Math.floor(Date.now() / 1000);
-  const publicId = `${FOLDER}/logos/${projectId}`;
+  // Unique per upload so account cards refresh past CDN cache after each export.
+  const publicId = `${FOLDER}/logos/${projectId}/${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
   const signed = `invalidate=true&overwrite=true&public_id=${publicId}&timestamp=${timestamp}`;
   const signature = createHash("sha1").update(signed + apiSecret).digest("hex");
-  const form = new FormData();
-  form.set("file", new Blob([new Uint8Array(file.body)], { type: file.mime }), file.filename);
-  form.set("api_key", apiKey);
-  form.set("timestamp", String(timestamp));
-  form.set("signature", signature);
-  form.set("public_id", publicId);
-  form.set("overwrite", "true");
-  form.set("invalidate", "true");
-  try {
+  const dataUri = `data:${file.mime};base64,${file.body.toString("base64")}`;
+
+  const attempt = async () => {
+    const form = new FormData();
+    form.set("file", dataUri);
+    form.set("api_key", apiKey);
+    form.set("timestamp", String(timestamp));
+    form.set("signature", signature);
+    form.set("public_id", publicId);
+    form.set("overwrite", "true");
+    form.set("invalidate", "true");
     const response = await fetch(`https://api.cloudinary.com/v1_1/${cloud}/image/upload`, {
       method: "POST",
       body: form,
     });
-    if (!response.ok) return null;
-    const payload = (await response.json()) as { secure_url?: unknown };
-    return typeof payload.secure_url === "string" ? payload.secure_url : null;
-  } catch {
-    return null;
+    const payload = (await response.json().catch(() => null)) as {
+      secure_url?: unknown;
+      error?: { message?: unknown };
+    } | null;
+    if (!response.ok) {
+      const message =
+        typeof payload?.error?.message === "string" ? payload.error.message : `HTTP ${response.status}`;
+      throw new Error(message);
+    }
+    if (typeof payload?.secure_url !== "string" || !payload.secure_url) {
+      throw new Error("Cloudinary response missing secure_url.");
+    }
+    return payload.secure_url;
+  };
+
+  try {
+    return await attempt();
+  } catch (first) {
+    try {
+      return await attempt();
+    } catch (second) {
+      const detail = second instanceof Error ? second.message : String(second);
+      const prior = first instanceof Error ? first.message : String(first);
+      console.error(`[logo-image] Cloudinary upload failed for ${projectId}: ${detail} (retry after: ${prior})`);
+      return null;
+    }
   }
 }

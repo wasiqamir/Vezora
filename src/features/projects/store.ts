@@ -314,6 +314,8 @@ export async function saveProjectDocument(
   if (!saved) return null;
   const recent =
     saved.imageStoredAt != null && Date.now() - saved.imageStoredAt.getTime() < IMAGE_GAP_MS;
+  // Export always stores a preview. Autosave only refreshes the card when a PNG is sent
+  // and the last preview is older than IMAGE_GAP_MS.
   const snapshot =
     image && (source === "save" || !recent)
       ? image
@@ -326,7 +328,23 @@ export async function saveProjectDocument(
         : null;
   if (snapshot) {
     const url = await uploadLogoFile(projectId, snapshot);
-    if (url) await rememberLogoImage(projectId, saved.versionNumber, url);
+    if (url) {
+      await rememberLogoImage(projectId, saved.versionNumber, url);
+    } else if (source === "save") {
+      // Still try the SVG silhouette so account cards are not blank after export.
+      const fallback =
+        snapshot.mime === "image/svg+xml"
+          ? null
+          : {
+              body: Buffer.from(templatePreviewSvg(document)),
+              mime: "image/svg+xml" as const,
+              filename: "logo.svg",
+            };
+      if (fallback) {
+        const svgUrl = await uploadLogoFile(projectId, fallback);
+        if (svgUrl) await rememberLogoImage(projectId, saved.versionNumber, svgUrl);
+      }
+    }
   }
   return { id: saved.id, name: saved.name, updatedAt: saved.updatedAt };
 }
