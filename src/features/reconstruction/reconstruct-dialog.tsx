@@ -22,7 +22,7 @@ import { createObjectId } from "@/features/editor/objects";
 import { getGuestAsset, registerGuestAsset, uploadSrc } from "@/features/editor/guest-assets";
 import { templatePreviewSvg } from "@/features/templates/preview";
 
-const GUEST_DRAFT_TIMEOUT_MS = 45_000;
+const GUEST_DRAFT_TIMEOUT_MS = 12_000;
 
 type View = "original" | "overlay" | "draft" | "side";
 
@@ -193,6 +193,10 @@ export function ReconstructDialog({
       setFailed(false);
       setMergeIds([]);
       setView("original");
+      if (intent === "elements") {
+        await commitDocument(fallback, "shapes");
+        return;
+      }
       setError(
         reason instanceof DOMException && reason.name === "AbortError"
           ? "That took too long. Your exact upload is ready — Save places it on the artboard."
@@ -211,6 +215,16 @@ export function ReconstructDialog({
       if (guest) {
         const local = getGuestAsset(assetId);
         if (!local) throw new Error("That image could not be found in this session.");
+        // Edit elements: skip serverless OCR/trace — open the exact upload on the artboard now.
+        if (intent === "elements") {
+          if (isStale?.()) return;
+          const exact = buildGuestExactDocument(local.id, local.width, local.height);
+          setDraft(exact);
+          setFailed(false);
+          setMergeIds([]);
+          await commitDocument(exact, "shapes");
+          return;
+        }
         await createGuestDraftFromFile(
           new File([local.blob], local.name, { type: local.mimeType }),
           { width: local.width, height: local.height },
@@ -939,8 +953,8 @@ function TextRow({
 }
 
 async function pollJob(jobId: string) {
-  for (let attempt = 0; attempt < 120; attempt += 1) {
-    await new Promise((resolve) => window.setTimeout(resolve, 800));
+  for (let attempt = 0; attempt < 90; attempt += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 400));
     const response = await fetch(`/api/reconstruction/${jobId}`);
     if (!response.ok) return "failed";
     const body = (await response.json()) as { job?: { status?: string } };
@@ -972,7 +986,7 @@ function buildGuestExactDocument(assetId: string, width: number, height: number)
       preset,
       width: boardWidth,
       height: boardHeight,
-      background: "#ffffff",
+      background: "#07041c",
     },
     objects: [
       {

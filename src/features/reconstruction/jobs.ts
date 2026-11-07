@@ -158,6 +158,10 @@ export async function runReconstructionJob(jobId: string) {
       mimeType: job.sourceAsset.mimeType,
       assetId: job.sourceAssetId,
       jobId: job.id,
+      // Keep Edit elements snappy: smaller raster, short OCR budget, single pass, parallel with trace.
+      maxEdge: 1280,
+      ocrTimeoutMs: 5_000,
+      fastOcr: true,
     });
     if (!(await stillRunning(job.id))) return;
     const version = await appendProjectVersion(

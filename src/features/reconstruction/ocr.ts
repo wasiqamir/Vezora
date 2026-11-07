@@ -10,14 +10,19 @@ export type TextHit = {
   confidence?: number;
 };
 
-export async function readText(raster: Raster): Promise<TextHit[]> {
+export async function readText(
+  raster: Raster,
+  options: { fast?: boolean } = {},
+): Promise<TextHit[]> {
   const worker = await createWorker("eng");
   try {
     const lines: TextHit[] = [];
-    const passes = [
-      { plate: compositeOnWhite(raster), mode: PSM.AUTO },
-      ...ocrPlates(raster).map((plate) => ({ plate, mode: PSM.SPARSE_TEXT })),
-    ];
+    const passes = options.fast
+      ? [{ plate: compositeOnWhite(raster), mode: PSM.AUTO }]
+      : [
+          { plate: compositeOnWhite(raster), mode: PSM.AUTO },
+          ...ocrPlates(raster).map((plate) => ({ plate, mode: PSM.SPARSE_TEXT })),
+        ];
     for (const pass of passes) {
       await worker.setParameters({ tessedit_pageseg_mode: pass.mode, user_defined_dpi: "96" });
       const result = await worker.recognize(Buffer.from(encodePng(pass.plate)), {}, { text: true, blocks: true });

@@ -51,14 +51,16 @@ export async function POST(request: Request) {
 
     const assetId = `guest_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
     const jobId = `guest_${assetId}`.slice(0, 80);
-    // OCR is required so Edit elements can promote words to live text instead of letter-icon slices.
-    // Cap wait so a slow Tesseract load cannot hang the guest dialog forever.
+    // Guest must return quickly: skip OCR (Tesseract cold-start dominates) and trace a smaller raster.
+    // Exact upload stays on the artboard; shapes still unlock from the vector pass.
     const draft = await buildReconstructionDraft({
       bytes,
       mimeType: file.type || "image/png",
       assetId,
       jobId,
-      ocrTimeoutMs: 18_000,
+      ocrTimeoutMs: 0,
+      maxEdge: 960,
+      fastOcr: true,
     });
 
     return Response.json({

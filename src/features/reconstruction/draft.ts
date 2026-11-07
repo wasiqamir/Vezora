@@ -28,49 +28,66 @@ export async function buildReconstructionDraft(input: {
   assetId: string;
   jobId: string;
   recognize?: (image: Uint8Array) => Promise<TextHit[]>;
-  /** Cap OCR wait so guest/serverless drafts still return vector shapes. */
+  /** Cap OCR wait so guest/serverless drafts still return vector shapes. 0 skips OCR. */
   ocrTimeoutMs?: number;
+  /** Max raster edge for tracing/OCR (lower = faster). Default 2048. */
+  maxEdge?: number;
+  /** Single OCR pass — much faster on serverless cold starts. */
+  fastOcr?: boolean;
 }): Promise<DraftResult> {
   const decoded = decodeRaster(input.bytes, input.mimeType);
-  const fitted = fitRaster(decoded, 2048);
+  const fitted = fitRaster(decoded, input.maxEdge ?? 2048);
   const study = studyImage(fitted.raster);
   // Grow small bitmaps uniformly so the board stays ≥256 while the image still fills it exactly.
   const layoutScale = Math.max(1, 256 / fitted.raster.width, 256 / fitted.raster.height);
   const artboard = artboardForExactImage(fitted.raster.width * layoutScale, fitted.raster.height * layoutScale);
   const fillScale = artboard.width / decoded.width;
   const original = imageObject(input.assetId, decoded.width, decoded.height, fillScale);
-  let paths: ProjectObject[] = [];
-  let recovered = false;
-  try {
-    const svg = convertPixels(fitted.raster.rgba, fitted.raster.width, fitted.raster.height, traceOptions(study));
-    paths = pathsFromSvg(svg, fitted.raster.width, fitted.raster.height).map((path, index) =>
-      scaleObject(pathObject(path, index), layoutScale),
-    );
-  } catch {
-    recovered = true;
-  }
   const background = study.hasTransparency ? null : (study.colors[0] ?? "#07041c");
   const textFill = contrastText(background);
-  let texts: ProjectObject[] = [];
-  if (!recovered) {
+  const skipOcr = input.ocrTimeoutMs === 0;
+  const wantOcr = !skipOcr;
+
+  const tracePromise = (async (): Promise<{ paths: ProjectObject[]; recovered: boolean }> => {
     try {
-      const ocr = input.recognize
-        ? input.recognize(encodePng(fitted.raster))
-        : readText(fitted.raster);
-      const hits =
-        input.ocrTimeoutMs && input.ocrTimeoutMs > 0
-          ? await Promise.race([
-              ocr,
-              new Promise<TextHit[]>((resolve) => {
-                setTimeout(() => resolve([]), input.ocrTimeoutMs);
-              }),
-            ])
-          : await ocr;
-      texts = hits.map((hit, index) => scaleObject(textObject(hit, index, textFill), layoutScale));
+      const svg = convertPixels(fitted.raster.rgba, fitted.raster.width, fitted.raster.height, traceOptions(study));
+      return {
+        paths: pathsFromSvg(svg, fitted.raster.width, fitted.raster.height).map((path, index) =>
+          scaleObject(pathObject(path, index), layoutScale),
+        ),
+        recovered: false,
+      };
     } catch {
-      texts = [];
+      return { paths: [], recovered: true };
     }
-  }
+  })();
+
+  const ocrPromise = wantOcr
+    ? (async (): Promise<ProjectObject[]> => {
+        try {
+          const ocr = input.recognize
+            ? input.recognize(encodePng(fitted.raster))
+            : readText(fitted.raster, { fast: input.fastOcr === true });
+          const hits =
+            input.ocrTimeoutMs && input.ocrTimeoutMs > 0
+              ? await Promise.race([
+                  ocr,
+                  new Promise<TextHit[]>((resolve) => {
+                    setTimeout(() => resolve([]), input.ocrTimeoutMs);
+                  }),
+                ])
+              : await ocr;
+          return hits.map((hit, index) => scaleObject(textObject(hit, index, textFill), layoutScale));
+        } catch {
+          return [];
+        }
+      })()
+    : Promise.resolve([]);
+
+  // Trace and OCR together so wall time is max(trace, ocr), not sum.
+  const [traced, texts] = await Promise.all([tracePromise, ocrPromise]);
+  const paths = traced.paths;
+  const recovered = traced.recovered;
   const raw: ProjectDocument = {
     schemaVersion: 1,
     artboard: {
