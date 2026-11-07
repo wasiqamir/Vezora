@@ -1768,9 +1768,9 @@ export class CanvasController {
       const fullWidth = Math.max(pieceWidth, this.artboard.width || pieceWidth);
       const fullHeight = Math.max(pieceHeight, this.artboard.height || pieceHeight);
       const clipSubtract = data.clipSubtract;
-      // Keep: transparent holes (clean move, rings may show). Remove: punch + fill round shape
-      // holes with the artboard color so moving a circle leaves no dark void. Never expand/fill
-      // word-band punches — that frays live text (VOLT, etc.) and no longer matches the upload.
+      // Keep: transparent holes (clean move, rings may show). Remove: fill every punch with the
+      // plate color so star/line ghosts disappear, but only expand non-rect shape holes — expanding
+      // word-band rects frays live text (VOLT).
       const hidePunches =
         data.name === "Logo" && this.reconstruction?.keepEdgeOutlines === false;
       const loaded =
@@ -1787,8 +1787,8 @@ export class CanvasController {
               pieceHeight,
               invert: clipInvert,
               subtractPath: clipSubtract,
-              expandSubtractPx: hidePunches ? 22 : 0,
-              expandOnlyRoundHoles: true,
+              expandSubtractPx: hidePunches ? 28 : 0,
+              expandExcludeRectHoles: hidePunches,
               fillSubtractWith: hidePunches ? this.background || "#111122" : undefined,
               expandClipPx: 0,
             })
@@ -2050,8 +2050,8 @@ export class CanvasController {
     subtractPath?: string;
     /** Grow destination-out holes by this many px (Logo plate). */
     expandSubtractPx?: number;
-    /** When set with expandSubtractPx, only stroke round-ish hole subpaths (not letters). */
-    expandOnlyRoundHoles?: boolean;
+    /** Expand only non-rect subpaths (stars/marks). Word-band H/V rects stay exact so text does not fray. */
+    expandExcludeRectHoles?: boolean;
     /** After punching, paint this color into the holes (hides dark voids on opaque artboards). */
     fillSubtractWith?: string;
     /** Grow destination-in clip by this many px so rings stay on the movable slice. */
@@ -2113,27 +2113,22 @@ export class CanvasController {
         const hole = new Path2D(input.subtractPath);
         context.fill(hole, "nonzero");
         const expand = input.expandSubtractPx ?? 0;
-        const roundOnly = input.expandOnlyRoundHoles === true;
-        const roundSubs = roundOnly
-          ? splitSubpaths(input.subtractPath).filter((sub) => {
-              const box = pathBounds(sub);
-              return Boolean(box && isRoundClipPath(sub, box.width, box.height));
-            })
-          : [];
-        if (expand > 0) {
+        const excludeRects = input.expandExcludeRectHoles === true;
+        const subs = splitSubpaths(input.subtractPath);
+        const expandSubs = excludeRects
+          ? subs.filter((sub) => !isAxisAlignedRectPath(sub))
+          : expand > 0
+            ? [input.subtractPath]
+            : [];
+        if (expand > 0 && expandSubs.length > 0) {
           context.lineWidth = expand * 2;
           context.lineJoin = "round";
           context.lineCap = "round";
           context.strokeStyle = "#000";
-          if (roundOnly) {
-            for (const sub of roundSubs) context.stroke(new Path2D(sub));
-          } else {
-            context.stroke(hole);
-          }
+          for (const sub of expandSubs) context.stroke(new Path2D(sub));
         }
-        // Paint plate-matching color into holes so Remove does not leave visible dark punches.
-        // With roundOnly, only fill/expand circular mark holes — leave word-band punches alone
-        // so live text stays identical to the original upload.
+        // Paint plate color into every punch so Remove clears star/line ghosts. Expand only
+        // shape holes — never word-band rects — so VOLT stays sharp.
         if (input.fillSubtractWith) {
           let fill = input.fillSubtractWith;
           const sx = Math.min(8, Math.max(0, pieceWidth - 1));
@@ -2142,27 +2137,13 @@ export class CanvasController {
           if (sample[3] > 200) fill = `rgb(${sample[0]},${sample[1]},${sample[2]})`;
           context.globalCompositeOperation = "destination-over";
           context.fillStyle = fill;
-          if (roundOnly) {
-            for (const sub of roundSubs) {
-              const path = new Path2D(sub);
-              context.fill(path, "nonzero");
-              if (expand > 0) {
-                context.lineWidth = expand * 2;
-                context.lineJoin = "round";
-                context.lineCap = "round";
-                context.strokeStyle = fill;
-                context.stroke(path);
-              }
-            }
-          } else {
-            context.fill(hole, "nonzero");
-            if (expand > 0) {
-              context.lineWidth = expand * 2;
-              context.lineJoin = "round";
-              context.lineCap = "round";
-              context.strokeStyle = fill;
-              context.stroke(hole);
-            }
+          context.fill(hole, "nonzero");
+          if (expand > 0 && expandSubs.length > 0) {
+            context.lineWidth = expand * 2;
+            context.lineJoin = "round";
+            context.lineCap = "round";
+            context.strokeStyle = fill;
+            for (const sub of expandSubs) context.stroke(new Path2D(sub));
           }
         }
       }
@@ -2674,14 +2655,11 @@ function splitSubpaths(pathD: string) {
   return pathD.split(/(?=M)/i).map((part) => part.trim()).filter(Boolean);
 }
 
-/** Heuristic: large circle mark pieces (diamond dots), not letter counters. */
-function isRoundClipPath(pathD: string, width: number, height: number) {
-  const min = Math.min(width, height);
-  const max = Math.max(width, height);
-  // Diamond dots are ~100–140px; letter bowls are smaller.
-  if (min < 95 || max > 180) return false;
-  if (max / Math.max(1, min) > 1.3) return false;
-  return /[CcQqAaSs]/.test(pathD);
+/** Word-band punches use H/V rect paths — do not expand those on Remove. */
+function isAxisAlignedRectPath(pathD: string) {
+  return /^\s*M\s+[-\d.]+\s+[-\d.]+\s+H\s+[-\d.]+\s+V\s+[-\d.]+\s+H\s+[-\d.]+\s+Z\s*$/i.test(
+    pathD.trim(),
+  );
 }
 
 /** True when pathD is an axis-aligned rect covering the piece crop (Logo plate). */

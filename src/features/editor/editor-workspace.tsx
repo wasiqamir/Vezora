@@ -476,8 +476,8 @@ export function EditorWorkspace({
                   aria-label="Faint ring outlines under editable parts"
                   title={
                     snapshot.keepEdgeOutlines
-                      ? "Holes under parts (clean move). Faint rings around round parts may show."
-                      : "Clears faint rings around round marks only — text and the rest stay identical to the upload."
+                      ? "Holes under parts (clean move). Faint rings around moved parts may show."
+                      : "Fills punches so star/line ghosts disappear. Text bands stay exact so letters do not fray."
                   }
                 >
                   <span className="px-2 text-[11px] tracking-wide text-white/55 uppercase">Outlines</span>
