@@ -9,11 +9,16 @@ export type LogoFile = {
   filename: string;
 };
 
+function cloudinaryEnv(name: "CLOUDINARY_CLOUD_NAME" | "CLOUDINARY_API_KEY" | "CLOUDINARY_API_SECRET") {
+  // Vercel/dashboard pastes sometimes keep trailing \\r\\n and break signed uploads.
+  return process.env[name]?.replace(/^\s+|\s+$/g, "") || "";
+}
+
 export function cloudinaryConfigured() {
   return Boolean(
-    process.env.CLOUDINARY_CLOUD_NAME &&
-      process.env.CLOUDINARY_API_KEY &&
-      process.env.CLOUDINARY_API_SECRET,
+    cloudinaryEnv("CLOUDINARY_CLOUD_NAME") &&
+      cloudinaryEnv("CLOUDINARY_API_KEY") &&
+      cloudinaryEnv("CLOUDINARY_API_SECRET"),
   );
 }
 
@@ -37,9 +42,9 @@ export function decodeLogoImage(value: string): LogoFile | null {
  * FormData/Blob quirks cannot silently drop the file (which left imageUrl null).
  */
 export async function uploadLogoFile(projectId: string, file: LogoFile) {
-  const cloud = process.env.CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  const cloud = cloudinaryEnv("CLOUDINARY_CLOUD_NAME");
+  const apiKey = cloudinaryEnv("CLOUDINARY_API_KEY");
+  const apiSecret = cloudinaryEnv("CLOUDINARY_API_SECRET");
   if (!cloud || !apiKey || !apiSecret) {
     console.error("[logo-image] Cloudinary env vars are missing; preview imageUrl will not be stored.");
     return null;
