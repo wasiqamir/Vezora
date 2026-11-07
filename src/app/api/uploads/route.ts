@@ -24,11 +24,14 @@ export async function POST(request: Request) {
     if (!(file instanceof File)) {
       return projectError("validation_failed", "Choose an image file.", 422);
     }
-    assertCanvasType(file.type);
-    assertUploadSize(file.size);
     const bytes = new Uint8Array(await file.arrayBuffer());
     assertUploadSize(bytes.byteLength);
-    const size = readImageSize(bytes, file.type);
+    const mimeType =
+      file.type === "image/png" || file.type === "image/jpeg" || file.type === "image/svg+xml"
+        ? file.type
+        : sniffUploadMime(bytes);
+    assertCanvasType(mimeType);
+    const size = readImageSize(bytes, mimeType);
     assertImageEdges(size.width, size.height);
     const prisma = getPrisma();
     const asset = await prisma.asset.create({
@@ -36,7 +39,7 @@ export async function POST(request: Request) {
         ownerId: userId,
         kind: "upload",
         storageKey: "pending",
-        mimeType: file.type,
+        mimeType,
         byteSize: bytes.byteLength,
         width: size.width,
         height: size.height,
@@ -45,7 +48,7 @@ export async function POST(request: Request) {
       },
       select: { id: true, mimeType: true, width: true, height: true, byteSize: true },
     });
-    const storageKey = await writeUpload(asset.id, bytes, file.type || "image/png");
+    const storageKey = await writeUpload(asset.id, bytes, mimeType);
     const updated = await prisma.asset.update({
       where: { id: asset.id },
       data: { storageKey },
@@ -54,7 +57,18 @@ export async function POST(request: Request) {
     return Response.json({ asset: updated }, { status: 201 });
   } catch (error) {
     if (error instanceof UploadError) return projectError(error.code, error.message, error.status);
-    logEvent("error", "upload.failed", { message: error instanceof Error ? error.message : "failed" });
-    return projectError("upload_failed", "That image could not be uploaded.", 500);
+    const message = error instanceof Error ? error.message : "failed";
+    logEvent("error", "upload.failed", { message });
+    return projectError(
+      "upload_failed",
+      message.startsWith("Could not store") ? message : "That image could not be uploaded.",
+      500,
+    );
   }
+}
+
+function sniffUploadMime(bytes: Uint8Array) {
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png";
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) return "image/jpeg";
+  return "application/octet-stream";
 }

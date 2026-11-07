@@ -4,6 +4,8 @@ import path from "node:path";
 import { cloudinaryConfigured } from "@/features/assets/logo-image";
 
 const root = path.join(process.cwd(), "storage", "uploads");
+/** Inline data URLs stay in Neon — works on Vercel when Cloudinary/disk are unavailable. */
+const INLINE_MAX_BYTES = 4 * 1024 * 1024;
 const FOLDER = "Vezora";
 
 function uploadPath(assetId: string) {
@@ -17,21 +19,42 @@ export function uploadStorageKey(assetId: string) {
 }
 
 export function isUploadStorageKey(storageKey: string) {
-  return storageKey.startsWith("uploads/") || storageKey.startsWith("https://");
+  return (
+    storageKey.startsWith("uploads/") ||
+    storageKey.startsWith("https://") ||
+    storageKey.startsWith("data:")
+  );
 }
 
-/** Persist bytes. On Vercel use Cloudinary; locally fall back to disk. Returns the storage key to save. */
+/** Persist bytes. Prefer Cloudinary, then inline data URL, then local disk. */
 export async function writeUpload(assetId: string, bytes: Uint8Array, mimeType = "image/png") {
   if (cloudinaryConfigured()) {
     const url = await writeUploadToCloudinary(assetId, bytes, mimeType);
     if (url) return url;
   }
-  await mkdir(root, { recursive: true });
-  await writeFile(uploadPath(assetId), bytes);
-  return uploadStorageKey(assetId);
+  if (bytes.byteLength > 0 && bytes.byteLength <= INLINE_MAX_BYTES) {
+    const b64 = Buffer.from(bytes).toString("base64");
+    return `data:${mimeType || "image/png"};base64,${b64}`;
+  }
+  try {
+    await mkdir(root, { recursive: true });
+    await writeFile(uploadPath(assetId), bytes);
+    return uploadStorageKey(assetId);
+  } catch (error) {
+    throw new Error(
+      error instanceof Error
+        ? `Could not store upload (${error.message}).`
+        : "Could not store upload.",
+    );
+  }
 }
 
 export async function readUpload(assetId: string, storageKey?: string | null) {
+  if (storageKey?.startsWith("data:")) {
+    const comma = storageKey.indexOf(",");
+    if (comma < 0) throw new Error("Upload missing.");
+    return Buffer.from(storageKey.slice(comma + 1), "base64");
+  }
   if (storageKey?.startsWith("https://")) {
     const response = await fetch(storageKey);
     if (!response.ok) throw new Error("Upload missing.");
@@ -49,9 +72,10 @@ async function writeUploadToCloudinary(assetId: string, bytes: Uint8Array, mimeT
   const publicId = `${FOLDER}/uploads/${assetId}`;
   const signed = `invalidate=true&overwrite=true&public_id=${publicId}&timestamp=${timestamp}`;
   const signature = createHash("sha1").update(signed + apiSecret).digest("hex");
+  const mime = mimeType || "image/png";
+  const dataUri = `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`;
   const form = new FormData();
-  const filename = mimeType.includes("jpeg") || mimeType.includes("jpg") ? "upload.jpg" : "upload.png";
-  form.set("file", new Blob([new Uint8Array(bytes)], { type: mimeType }), filename);
+  form.set("file", dataUri);
   form.set("api_key", apiKey);
   form.set("timestamp", String(timestamp));
   form.set("signature", signature);
