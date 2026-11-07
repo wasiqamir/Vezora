@@ -17,6 +17,8 @@ import {
 } from "@/features/reliability/limits";
 import { logEvent } from "@/lib/log";
 
+export const maxDuration = 60;
+
 const MAX_BODY = 8 * 1024 * 1024 + 64 * 1024;
 
 /** Guest Start-from-image draft: no account project — returns an editable document + asset id. */
@@ -49,11 +51,14 @@ export async function POST(request: Request) {
 
     const assetId = `guest_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
     const jobId = `guest_${assetId}`.slice(0, 80);
+    // Skip OCR on the guest path — Tesseract routinely times out on serverless and stuck the dialog.
+    // Vector tracing still builds editable shapes; live text can wait for a signed-in Edit elements pass.
     const draft = await buildReconstructionDraft({
       bytes,
       mimeType: file.type || "image/png",
       assetId,
       jobId,
+      recognize: async () => [],
     });
 
     return Response.json({

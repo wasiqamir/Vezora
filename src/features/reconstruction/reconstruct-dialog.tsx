@@ -18,8 +18,11 @@ import {
   useEditableText,
   useVectorOutlines,
 } from "@/features/reconstruction/correct";
+import { createObjectId } from "@/features/editor/objects";
 import { getGuestAsset, registerGuestAsset, uploadSrc } from "@/features/editor/guest-assets";
 import { templatePreviewSvg } from "@/features/templates/preview";
+
+const GUEST_DRAFT_TIMEOUT_MS = 45_000;
 
 type View = "original" | "overlay" | "draft" | "side";
 
@@ -138,35 +141,65 @@ export function ReconstructDialog({
     }
   }
 
-  async function createGuestDraftFromFile(source: File, isStale?: () => boolean) {
+  async function createGuestDraftFromFile(source: File, measured: { width: number; height: number }, isStale?: () => boolean) {
     const body = new FormData();
     body.set("file", source);
-    const response = await fetch("/api/reconstruction/guest", { method: "POST", body });
-    const payload = (await response.json()) as {
-      asset?: { id: string; width: number; height: number; mimeType: string };
-      document?: ProjectDocument;
-      recovered?: boolean;
-      error?: { message?: string };
-    };
-    if (!response.ok || !payload.asset || !payload.document) {
-      throw new Error(payload.error?.message ?? "Could not build a draft from this image.");
-    }
-    if (isStale?.()) return;
-    registerGuestAsset({
-      id: payload.asset.id,
-      blob: source,
-      mimeType: payload.asset.mimeType || source.type || "image/png",
-      width: payload.asset.width,
-      height: payload.asset.height,
-      name: source.name,
-    });
-    const prepared = preferEditableElements(payload.document);
-    setDraft(prepared);
-    setFailed(Boolean(payload.recovered));
-    setMergeIds([]);
-    setView("side");
-    if (intent === "elements" && !payload.recovered) {
-      await commitDocument(prepared, "shapes");
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), GUEST_DRAFT_TIMEOUT_MS);
+    try {
+      const response = await fetch("/api/reconstruction/guest", {
+        method: "POST",
+        body,
+        signal: controller.signal,
+      });
+      const payload = (await response.json()) as {
+        asset?: { id: string; width: number; height: number; mimeType: string };
+        document?: ProjectDocument;
+        recovered?: boolean;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.asset || !payload.document) {
+        throw new Error(payload.error?.message ?? "Could not build a draft from this image.");
+      }
+      if (isStale?.()) return;
+      registerGuestAsset({
+        id: payload.asset.id,
+        blob: source,
+        mimeType: payload.asset.mimeType || source.type || "image/png",
+        width: payload.asset.width,
+        height: payload.asset.height,
+        name: source.name,
+      });
+      const prepared = preferEditableElements(payload.document);
+      setDraft(prepared);
+      setFailed(Boolean(payload.recovered));
+      setMergeIds([]);
+      setView("side");
+      if (intent === "elements" && !payload.recovered) {
+        await commitDocument(prepared, "shapes");
+      }
+    } catch (reason) {
+      if (isStale?.()) return;
+      // Keep the session moving: place an exact-image draft so Save still works.
+      const asset = registerGuestAsset({
+        blob: source,
+        mimeType: source.type || "image/png",
+        width: measured.width,
+        height: measured.height,
+        name: source.name,
+      });
+      const fallback = buildGuestExactDocument(asset.id, measured.width, measured.height);
+      setDraft(fallback);
+      setFailed(false);
+      setMergeIds([]);
+      setView("original");
+      setError(
+        reason instanceof DOMException && reason.name === "AbortError"
+          ? "That took too long. Your exact upload is ready — Save places it on the artboard."
+          : "Could not break the image into shapes. Your exact upload is ready — Save places it on the artboard.",
+      );
+    } finally {
+      window.clearTimeout(timer);
     }
   }
 
@@ -178,7 +211,11 @@ export function ReconstructDialog({
       if (guest) {
         const local = getGuestAsset(assetId);
         if (!local) throw new Error("That image could not be found in this session.");
-        await createGuestDraftFromFile(new File([local.blob], local.name, { type: local.mimeType }), isStale);
+        await createGuestDraftFromFile(
+          new File([local.blob], local.name, { type: local.mimeType }),
+          { width: local.width, height: local.height },
+          isStale,
+        );
         return;
       }
       // Clear any stuck/in-flight job so Edit elements is not blocked by a prior run.
@@ -239,8 +276,7 @@ export function ReconstructDialog({
     setRunning(true);
     try {
       if (guest) {
-        await createGuestDraftFromFile(file);
-        setRunning(false);
+        await createGuestDraftFromFile(file, size);
         return;
       }
       const body = new FormData();
@@ -256,6 +292,7 @@ export function ReconstructDialog({
       await createDraftFromAsset(uploadBody.asset.id);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not build a draft from this image.");
+    } finally {
       setRunning(false);
     }
   }
@@ -918,4 +955,49 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 102.4) / 10} KB`;
   return `${Math.round(bytes / 104857.6) / 10} MB`;
+}
+
+function buildGuestExactDocument(assetId: string, width: number, height: number): ProjectDocument {
+  const layoutScale = Math.max(1, 256 / width, 256 / height);
+  const boardWidth = Math.max(256, Math.min(2048, Math.round(width * layoutScale)));
+  const boardHeight = Math.max(256, Math.min(2048, Math.round(height * layoutScale)));
+  const scale = boardWidth / width;
+  let preset: ProjectDocument["artboard"]["preset"] = "custom";
+  if (boardWidth === 1000 && boardHeight === 1000) preset = "square";
+  else if (boardWidth === 512 && boardHeight === 512) preset = "icon";
+  else if (boardWidth === 1600 && boardHeight === 800) preset = "horizontal";
+  else if (boardWidth === 800 && boardHeight === 1400) preset = "vertical";
+  return {
+    schemaVersion: 1,
+    artboard: {
+      preset,
+      width: boardWidth,
+      height: boardHeight,
+      background: "#ffffff",
+    },
+    objects: [
+      {
+        id: createObjectId(),
+        type: "image",
+        name: "Original",
+        x: 0,
+        y: 0,
+        width,
+        height,
+        scaleX: Number(scale.toFixed(4)),
+        scaleY: Number(scale.toFixed(4)),
+        angle: 0,
+        opacity: 1,
+        visible: true,
+        locked: false,
+        assetId,
+      },
+    ],
+    reconstruction: {
+      jobId: `guest_${assetId}`.slice(0, 80),
+      sourceAssetId: assetId,
+      note: "Your exact upload is on the artboard as Logo. Edit that same image.",
+      keepShapes: false,
+    },
+  };
 }
