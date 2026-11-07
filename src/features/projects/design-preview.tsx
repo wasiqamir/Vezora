@@ -6,7 +6,7 @@ export function DesignPreview({
   label,
   imageUrl,
   framed = false,
-  frameClassName = "h-44",
+  frameClassName = "h-44 bg-[#f4f2ec] px-6",
 }: {
   document: ProjectDocument;
   label: string;
@@ -19,7 +19,7 @@ export function DesignPreview({
       <div
         className={
           framed
-            ? `flex items-center justify-center bg-[#f4f2ec] px-6 ${frameClassName}`
+            ? `flex items-center justify-center ${frameClassName}`
             : "w-full overflow-hidden rounded-lg bg-muted"
         }
         style={framed ? undefined : { aspectRatio: `${document.artboard.width} / ${document.artboard.height}` }}
@@ -31,11 +31,7 @@ export function DesignPreview({
   const svg = templatePreviewSvg(document);
   if (framed) {
     return (
-      <div
-        className={`flex items-center justify-center bg-[#f4f2ec] px-6 ${frameClassName}`}
-        role="img"
-        aria-label={label}
-      >
+      <div className={`flex items-center justify-center ${frameClassName}`} role="img" aria-label={label}>
         <div
           className="h-full max-w-full [&_svg]:h-full [&_svg]:w-auto [&_svg]:max-w-full"
           dangerouslySetInnerHTML={{ __html: svg }}

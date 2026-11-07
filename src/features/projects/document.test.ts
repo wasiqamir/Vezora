@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   blankProjectDocument,
   migrateDocument,
+  exactLogoDocument,
+  preferExactUpload,
   ProjectDocumentError,
   projectFromScene,
   reassignObjectIds,
@@ -85,5 +87,94 @@ describe("project documents", () => {
     );
     assert.equal(copy.objects[1]?.text, "RIDLEY");
     assert.notEqual(copy.objects[0]?.id, saved.objects[0]?.id);
+  });
+
+  it("puts only the exact upload on the artboard for Edit elements", () => {
+    const document = migrateDocument({
+      ...blankProjectDocument(),
+      objects: [
+        {
+          id: "obj_shape",
+          type: "path",
+          name: "Shape 3",
+          x: 10,
+          y: 10,
+          width: 40,
+          height: 40,
+          scaleX: 1,
+          scaleY: 1,
+          angle: 0,
+          opacity: 1,
+          visible: true,
+          locked: false,
+          fill: "#eea9fa",
+          path: "M 10 10 H 50 V 50 H 10 Z",
+        },
+      ],
+      reconstruction: {
+        jobId: "job_1",
+        sourceAssetId: "asset_bloom",
+        keepShapes: true,
+        note: "shapes",
+      },
+    });
+    const exact = exactLogoDocument(document, "asset_bloom");
+    assert.equal(exact.objects.length, 1);
+    assert.equal(exact.objects[0]?.name, "Logo");
+    assert.equal(exact.objects[0]?.assetId, "asset_bloom");
+    assert.equal(exact.objects[0]?.locked, false);
+    assert.equal(exact.reconstruction?.keepShapes, false);
+  });
+
+  it("keeps the exact upload and drops traced layers after reconstruction", () => {
+    const document = migrateDocument({
+      ...blankProjectDocument(),
+      objects: [
+        {
+          id: "obj_upload",
+          type: "image",
+          name: "Original",
+          x: 0,
+          y: 0,
+          width: 1000,
+          height: 1000,
+          scaleX: 1,
+          scaleY: 1,
+          angle: 0,
+          opacity: 1,
+          visible: false,
+          locked: true,
+          assetId: "asset_bloom",
+        },
+        {
+          id: "obj_shape",
+          type: "path",
+          name: "Shape 3",
+          x: 10,
+          y: 10,
+          width: 40,
+          height: 40,
+          scaleX: 1,
+          scaleY: 1,
+          angle: 0,
+          opacity: 1,
+          visible: true,
+          locked: false,
+          fill: "#eea9fa",
+          path: "M 10 10 H 50 V 50 H 10 Z",
+        },
+      ],
+      reconstruction: {
+        jobId: "job_1",
+        sourceAssetId: "asset_bloom",
+        note: "traced",
+      },
+    });
+    const preferred = preferExactUpload(document);
+    assert.equal(preferred.objects.length, 1);
+    assert.equal(preferred.objects[0]?.name, "Logo");
+    assert.equal(preferred.objects[0]?.visible, true);
+    assert.equal(preferred.objects[0]?.locked, false);
+    assert.equal(preferred.objects[0]?.assetId, "asset_bloom");
   });
 });

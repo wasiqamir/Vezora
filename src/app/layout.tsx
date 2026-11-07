@@ -28,9 +28,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col">
-        <SplashScreen />
-        <Suspense fallback={<div className="h-14 border-b" />}>
+      <body className="flex min-h-full flex-col bg-[#07041c] text-white">
+        <Suspense fallback={null}>
+          <SplashScreen />
+        </Suspense>
+        <Suspense fallback={<div className="h-[4.8125rem]" />}>
           <SessionHeader />
         </Suspense>
         {children}

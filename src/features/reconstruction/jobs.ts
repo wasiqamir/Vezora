@@ -82,6 +82,20 @@ export async function cancelReconstructionJob(ownerId: string, jobId: string) {
   return updated.count > 0;
 }
 
+/** Drop any in-flight jobs so a new Edit elements run can start cleanly. */
+export async function cancelActiveReconstructionJobs(ownerId: string) {
+  const updated = await getPrisma().reconstructionJob.updateMany({
+    where: { ownerId, status: { in: [...ACTIVE] } },
+    data: {
+      status: "failed",
+      errorCode: "cancelled",
+      errorMessage: "Cancelled.",
+      finishedAt: new Date(),
+    },
+  });
+  return updated.count;
+}
+
 let chain: Promise<void> = Promise.resolve();
 
 export function enqueueReconstruction(jobId: string) {
@@ -202,9 +216,13 @@ async function saveOriginalOnly(job: {
 }) {
   const width = job.sourceAsset.width ?? 1000;
   const height = job.sourceAsset.height ?? 1000;
-  const scale = Math.min(1, 2048 / width, 2048 / height);
-  const boardWidth = Math.max(256, Math.min(2048, Math.round(width * scale)));
-  const boardHeight = Math.max(256, Math.min(2048, Math.round(height * scale)));
+  const fit = Math.min(1, 2048 / width, 2048 / height);
+  const fittedWidth = Math.max(1, Math.round(width * fit));
+  const fittedHeight = Math.max(1, Math.round(height * fit));
+  const grow = Math.max(1, 256 / fittedWidth, 256 / fittedHeight);
+  const boardWidth = Math.max(256, Math.min(2048, Math.round(fittedWidth * grow)));
+  const boardHeight = Math.max(256, Math.min(2048, Math.round(fittedHeight * grow)));
+  const fillScale = boardWidth / width;
   return appendProjectVersion(
     job.ownerId,
     job.projectId,
@@ -214,7 +232,7 @@ async function saveOriginalOnly(job: {
         preset: boardWidth === boardHeight && boardWidth === 1000 ? "square" : "custom",
         width: boardWidth,
         height: boardHeight,
-        background: "#ffffff",
+        background: "#07041c",
       },
       objects: [
         {
@@ -225,8 +243,8 @@ async function saveOriginalOnly(job: {
           y: 0,
           width,
           height,
-          scaleX: scale,
-          scaleY: scale,
+          scaleX: fillScale,
+          scaleY: fillScale,
           angle: 0,
           opacity: 1,
           visible: true,
@@ -237,7 +255,7 @@ async function saveOriginalOnly(job: {
       reconstruction: {
         jobId: job.id,
         sourceAssetId: job.sourceAssetId,
-        note: "Draft from a PNG or JPG. It is an approximation.",
+        note: "Your exact upload is on the artboard. Edit the shapes in Layers, or use Side by side to compare.",
       },
     },
     "reconstruction",

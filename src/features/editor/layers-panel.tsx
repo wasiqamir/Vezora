@@ -21,24 +21,34 @@ export function LayersPanel({
   onToggleLocked,
 }: LayersPanelProps) {
   return (
-    <section className="flex flex-col gap-2 p-4">
-      <h2 className="text-xs font-medium tracking-[0.16em] text-[#6d5bd0] uppercase">Layers</h2>
-      <p className="text-xs text-muted-foreground">The top of the list is in front.</p>
-      <p className="text-xs text-muted-foreground">
-        Ctrl+Z undoes. Arrows nudge. Shift moves 10px.
-      </p>
+    <section className="flex min-h-0 flex-1 flex-col gap-4 p-5">
+      <div>
+        <p className="text-[11px] tracking-[0.28em] text-white/40 uppercase">Stack</p>
+        <h2 className="mt-1 text-lg font-semibold tracking-tight text-white">Layers</h2>
+      </div>
+
       {layers.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No layers yet.</p>
+        <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-5 text-sm text-white/55">
+          Layers appear here as you add marks.
+        </p>
       ) : (
-        <ul className="flex flex-col gap-1">
+        <ul className="flex flex-col gap-1.5">
           {layers.map((layer, index) => (
-            <li key={layer.id} className="flex items-center gap-1">
+            <li
+              key={layer.id}
+              className={cn(
+                "group flex items-center gap-1 rounded-2xl border px-1.5 py-1.5 transition-colors",
+                layer.selected
+                  ? "border-white/20 bg-white/[0.1] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]"
+                  : "border-transparent hover:border-white/10 hover:bg-white/[0.04]",
+              )}
+            >
               <button
                 type="button"
                 className={cn(
-                  "min-w-0 flex-1 truncate rounded-md px-2 py-1 text-left text-sm",
-                  layer.selected ? "bg-[#efeafc] font-medium text-[#16141f]" : "hover:bg-[#f4f2ec]",
-                  layer.visible ? "" : "text-muted-foreground",
+                  "min-w-0 flex-1 truncate rounded-xl px-2.5 py-1.5 text-left text-sm",
+                  layer.selected ? "font-medium text-white" : "text-white/80",
+                  layer.visible ? "" : "text-white/35",
                 )}
                 onClick={(event) => onSelect(layer.id, event.shiftKey)}
               >
@@ -48,6 +58,7 @@ export function LayersPanel({
                 type="button"
                 variant="ghost"
                 size="icon-xs"
+                className="text-white/45 opacity-70 hover:bg-white/10 hover:text-white group-hover:opacity-100"
                 aria-label={`Bring ${layer.name} forward`}
                 disabled={index === 0}
                 onClick={() => onReorder(layer.id, "forward")}
@@ -58,6 +69,7 @@ export function LayersPanel({
                 type="button"
                 variant="ghost"
                 size="icon-xs"
+                className="text-white/45 opacity-70 hover:bg-white/10 hover:text-white group-hover:opacity-100"
                 aria-label={`Send ${layer.name} backward`}
                 disabled={index === layers.length - 1}
                 onClick={() => onReorder(layer.id, "backward")}
@@ -68,6 +80,7 @@ export function LayersPanel({
                 type="button"
                 variant="ghost"
                 size="icon-xs"
+                className="text-white/45 hover:bg-white/10 hover:text-white"
                 aria-label={layer.visible ? `Hide ${layer.name}` : `Show ${layer.name}`}
                 aria-pressed={!layer.visible}
                 onClick={() => onToggleVisible(layer.id)}
@@ -78,6 +91,7 @@ export function LayersPanel({
                 type="button"
                 variant="ghost"
                 size="icon-xs"
+                className="text-white/45 hover:bg-white/10 hover:text-white"
                 aria-label={layer.locked ? `Unlock ${layer.name}` : `Lock ${layer.name}`}
                 aria-pressed={layer.locked}
                 onClick={() => onToggleLocked(layer.id)}

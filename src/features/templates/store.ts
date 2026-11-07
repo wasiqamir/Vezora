@@ -56,36 +56,94 @@ export async function ensurePublishedTemplates() {
   }
 }
 
+function listStarterTemplates(category: TemplateCategory | null, query: string) {
+  const needle = query.trim().toLowerCase();
+  return starterTemplateDocuments
+    .filter((template) => {
+      if (category && CATEGORY_BY_LABEL[template.category] !== category) return false;
+      if (!needle) return true;
+      return (
+        template.name.toLowerCase().includes(needle) ||
+        template.description.toLowerCase().includes(needle)
+      );
+    })
+    .map((template) => {
+      const document = migrateDocument(template.document);
+      return {
+        id: template.slug,
+        slug: template.slug,
+        name: template.name,
+        category: template.category,
+        description: template.description,
+        schemaVersion: document.schemaVersion,
+        document,
+      };
+    })
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
 export async function listPublishedTemplates(category: TemplateCategory | null, query: string) {
-  await ensurePublishedTemplates();
-  const prisma = getPrisma();
-  const templates = await prisma.template.findMany({
-    where: {
-      published: true,
-      ...(category ? { category } : {}),
-      ...(query
-        ? {
-            OR: [
-              { name: { contains: query, mode: "insensitive" } },
-              { description: { contains: query, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    },
-    orderBy: { name: "asc" },
-  });
-  return templates.map(presentTemplate);
+  try {
+    await ensurePublishedTemplates();
+    const prisma = getPrisma();
+    const templates = await prisma.template.findMany({
+      where: {
+        published: true,
+        ...(category ? { category } : {}),
+        ...(query
+          ? {
+              OR: [
+                { name: { contains: query, mode: "insensitive" } },
+                { description: { contains: query, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: { name: "asc" },
+    });
+    if (templates.length > 0) return templates.map(presentTemplate);
+  } catch {
+    // Local Prisma Postgres may be down; still show the built-in catalog.
+  }
+  return listStarterTemplates(category, query);
+}
+
+export async function resolvePublishedTemplate(templateId: string) {
+  const key = templateId.trim();
+  if (!key) return null;
+
+  try {
+    await ensurePublishedTemplates();
+    const prisma = getPrisma();
+    const template = await prisma.template.findFirst({
+      where: { published: true, OR: [{ id: key }, { slug: key }] },
+    });
+    if (template) {
+      return {
+        id: template.id,
+        slug: template.slug,
+        name: template.name,
+        document: reassignObjectIds(migrateDocument(template.document), createObjectId),
+      };
+    }
+  } catch {
+    // Fall through to the built-in catalog when Postgres is unavailable.
+  }
+
+  const starter = starterTemplateDocuments.find((template) => template.slug === key);
+  if (!starter) return null;
+  return {
+    id: starter.slug,
+    slug: starter.slug,
+    name: starter.name,
+    document: reassignObjectIds(migrateDocument(starter.document), createObjectId),
+  };
 }
 
 export async function createProjectFromTemplate(ownerId: string, templateId: string) {
-  await ensurePublishedTemplates();
-  const prisma = getPrisma();
-  const template = await prisma.template.findFirst({
-    where: { published: true, OR: [{ id: templateId }, { slug: templateId }] },
-  });
+  const template = await resolvePublishedTemplate(templateId);
   if (!template) return null;
-  const document = reassignObjectIds(migrateDocument(template.document), createObjectId);
-  const existing = await prisma.project.findMany({
+  const existing = await getPrisma().project.findMany({
     where: { ownerId, deletedAt: null },
     select: { name: true },
   });
@@ -93,8 +151,7 @@ export async function createProjectFromTemplate(ownerId: string, templateId: str
     template.name,
     existing.map((project) => project.name),
   );
-  const project = await createProject(ownerId, name, document, "template");
-  return project;
+  return createProject(ownerId, name, template.document, "template");
 }
 
 function presentTemplate(template: {

@@ -1,5 +1,6 @@
 import { convertPixels, type Options } from "@visioncortex/vtracer";
 import type { ProjectDocument, ProjectObject } from "@/features/projects/document";
+import { preferEditableElements } from "@/features/reconstruction/correct";
 import { readText, type TextHit } from "@/features/reconstruction/ocr";
 import { pathsFromSvg } from "@/features/reconstruction/paths";
 import {
@@ -10,9 +11,10 @@ import {
   type ImageStudy,
 } from "@/features/reconstruction/preprocess";
 
-const DRAFT_NOTE = "Draft from a PNG or JPG. It is an approximation.";
+const DRAFT_NOTE =
+  "Your exact upload stays available. Edit elements puts each shape and word on the artboard unlocked.";
 const APPROXIMATE_NOTE =
-  "Draft from a PNG or JPG. It is an approximation. Flat colors could not be recovered exactly.";
+  "Your exact upload stays available. Edit elements puts each shape and word on the artboard unlocked.";
 
 export type DraftResult = {
   document: ProjectDocument;
@@ -30,45 +32,54 @@ export async function buildReconstructionDraft(input: {
   const decoded = decodeRaster(input.bytes, input.mimeType);
   const fitted = fitRaster(decoded, 2048);
   const study = studyImage(fitted.raster);
-  const artboard = artboardFor(fitted.raster.width, fitted.raster.height);
-  const original = imageObject(input.assetId, decoded.width, decoded.height, fitted.scale);
+  // Grow small bitmaps uniformly so the board stays ≥256 while the image still fills it exactly.
+  const layoutScale = Math.max(1, 256 / fitted.raster.width, 256 / fitted.raster.height);
+  const artboard = artboardForExactImage(fitted.raster.width * layoutScale, fitted.raster.height * layoutScale);
+  const fillScale = artboard.width / decoded.width;
+  const original = imageObject(input.assetId, decoded.width, decoded.height, fillScale);
   let paths: ProjectObject[] = [];
   let recovered = false;
   try {
     const svg = convertPixels(fitted.raster.rgba, fitted.raster.width, fitted.raster.height, traceOptions(study));
     paths = pathsFromSvg(svg, fitted.raster.width, fitted.raster.height).map((path, index) =>
-      pathObject(path, index),
+      scaleObject(pathObject(path, index), layoutScale),
     );
   } catch {
     recovered = true;
   }
+  const background = study.hasTransparency ? null : (study.colors[0] ?? "#07041c");
+  const textFill = contrastText(background);
   let texts: ProjectObject[] = [];
   if (!recovered) {
     try {
       const hits = input.recognize ? await input.recognize(encodePng(fitted.raster)) : await readText(fitted.raster);
-      texts = hits.map((hit, index) => textObject(hit, index));
+      texts = hits.map((hit, index) => scaleObject(textObject(hit, index, textFill), layoutScale));
     } catch {
       texts = [];
     }
   }
+  const raw: ProjectDocument = {
+    schemaVersion: 1,
+    artboard: {
+      preset: artboard.preset,
+      width: artboard.width,
+      height: artboard.height,
+      // Match the upload instead of a white board behind it.
+      background,
+    },
+    // Exact upload underneath; editable vectors on top so the icon can be selected.
+    objects: [original, ...paths, ...texts],
+    reconstruction: {
+      jobId: input.jobId,
+      sourceAssetId: input.assetId,
+      note: study.approximate || recovered ? APPROXIMATE_NOTE : DRAFT_NOTE,
+    },
+  };
+  // Letter outlines when available, otherwise live text — every piece can be edited.
   return {
     recovered,
     colors: colorsFrom(paths, study),
-    document: {
-      schemaVersion: 1,
-      artboard: {
-        preset: artboard.preset,
-        width: artboard.width,
-        height: artboard.height,
-        background: study.hasTransparency ? null : "#ffffff",
-      },
-      objects: [original, ...paths, ...texts],
-      reconstruction: {
-        jobId: input.jobId,
-        sourceAssetId: input.assetId,
-        note: study.approximate || recovered ? APPROXIMATE_NOTE : DRAFT_NOTE,
-      },
-    },
+    document: preferEditableElements(raw),
   };
 }
 
@@ -91,9 +102,9 @@ function traceOptions(study: ImageStudy): Options {
   };
 }
 
-function artboardFor(width: number, height: number) {
-  const boardWidth = clampEdge(width);
-  const boardHeight = clampEdge(height);
+function artboardForExactImage(width: number, height: number) {
+  const boardWidth = Math.max(256, Math.min(2048, Math.round(width)));
+  const boardHeight = Math.max(256, Math.min(2048, Math.round(height)));
   let preset: ProjectDocument["artboard"]["preset"] = "custom";
   if (boardWidth === 1000 && boardHeight === 1000) preset = "square";
   else if (boardWidth === 512 && boardHeight === 512) preset = "icon";
@@ -102,8 +113,25 @@ function artboardFor(width: number, height: number) {
   return { width: boardWidth, height: boardHeight, preset };
 }
 
-function clampEdge(value: number) {
-  return Math.max(256, Math.min(2048, Math.round(value)));
+function scaleObject(object: ProjectObject, factor: number): ProjectObject {
+  if (factor === 1) return object;
+  return {
+    ...object,
+    x: round(object.x * factor),
+    y: round(object.y * factor),
+    width: round(object.width * factor),
+    height: round(object.height * factor),
+    ...(object.path ? { path: scalePathD(object.path, factor) } : {}),
+    ...(object.fontSize !== undefined ? { fontSize: Math.max(12, round(object.fontSize * factor)) } : {}),
+  };
+}
+
+/** Scale every numeric coordinate in an SVG path so clips stay aligned after layoutScale. */
+function scalePathD(d: string, factor: number) {
+  return d.replace(/[-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?/g, (value) => {
+    const next = Number(value) * factor;
+    return Number.isFinite(next) ? String(round(next)) : value;
+  });
 }
 
 function imageObject(assetId: string, width: number, height: number, scale: number): ProjectObject {
@@ -119,8 +147,10 @@ function imageObject(assetId: string, width: number, height: number, scale: numb
     scaleY: round(scale),
     angle: 0,
     opacity: 1,
-    visible: true,
+    // Hidden while traced shapes are the editable logo. Side by side / eye can reveal it alone.
+    visible: false,
     locked: true,
+    opacity: 1,
     assetId,
   };
 }
@@ -141,6 +171,7 @@ function pathObject(
     scaleY: 1,
     angle: 0,
     opacity: 1,
+    // The editable icon — only these shapes are shown after save, not a second bitmap copy.
     visible: true,
     locked: false,
     fill: path.fill,
@@ -151,7 +182,7 @@ function pathObject(
   };
 }
 
-function textObject(hit: TextHit, index: number): ProjectObject {
+function textObject(hit: TextHit, index: number, fill = "#171717"): ProjectObject {
   const size = Math.max(12, Math.min(240, Math.round(hit.height * 0.82)));
   return {
     id: objectId(),
@@ -168,7 +199,7 @@ function textObject(hit: TextHit, index: number): ProjectObject {
     opacity: 1,
     visible: true,
     locked: false,
-    fill: "#171717",
+    fill,
     fontFamily: "Outfit",
     fontId: "outfit",
     fontSize: size,
@@ -178,6 +209,16 @@ function textObject(hit: TextHit, index: number): ProjectObject {
     textAlign: "left",
     ...confidenceField(hit.confidence),
   };
+}
+
+function contrastText(background: string | null) {
+  if (!background || !/^#[0-9a-fA-F]{6}$/.test(background)) return "#171717";
+  const value = background.slice(1);
+  const r = Number.parseInt(value.slice(0, 2), 16);
+  const g = Number.parseInt(value.slice(2, 4), 16);
+  const b = Number.parseInt(value.slice(4, 6), 16);
+  const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luma < 0.55 ? "#ffffff" : "#171717";
 }
 
 function confidenceField(value: number | undefined) {

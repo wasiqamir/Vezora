@@ -36,6 +36,8 @@ export const initialEditorSnapshot: EditorSnapshot = {
   offsetDistance: 28,
   revision: 0,
   error: null,
+  keepShapes: false,
+  keepEdgeOutlines: true,
 };
 
 export function matchArtboardPreset(width: number, height: number): ArtboardPresetId {

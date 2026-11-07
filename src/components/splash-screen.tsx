@@ -1,17 +1,48 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Droplet, Image as ImageIcon, Layers, PenTool, Type } from "lucide-react";
 import { VezoraMark } from "@/components/vezora-mark";
 
 const LOAD_MS = 6500;
 const FADE_MS = 500;
+const HOME_PATH = "/homepage";
+
+/** True after splash has finished (or been skipped) in this tab. */
+let splashBootstrapped = false;
 
 export function SplashScreen() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const isEntry = pathname === "/";
   const barRef = useRef<HTMLDivElement>(null);
-  const [phase, setPhase] = useState<"show" | "leave" | "gone">("show");
+  const [phase, setPhase] = useState<"show" | "leave" | "gone">(isEntry && !splashBootstrapped ? "show" : "gone");
+  const [active, setActive] = useState(isEntry && !splashBootstrapped);
+
+  useLayoutEffect(() => {
+    if (!isEntry) {
+      if (pathname === HOME_PATH || pathname.startsWith(`${HOME_PATH}/`)) {
+        splashBootstrapped = true;
+      }
+      setActive(false);
+      setPhase("gone");
+      return;
+    }
+
+    if (splashBootstrapped) {
+      setActive(false);
+      setPhase("gone");
+      router.replace(HOME_PATH);
+      return;
+    }
+
+    setActive(true);
+    setPhase("show");
+  }, [isEntry, pathname, router]);
 
   useEffect(() => {
+    if (!active || !isEntry) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const duration = reduced ? 700 : LOAD_MS;
     const previousOverflow = document.body.style.overflow;
@@ -25,8 +56,10 @@ export function SplashScreen() {
     };
     frame = window.requestAnimationFrame(tick);
     const leaveTimer = window.setTimeout(() => {
+      splashBootstrapped = true;
       setPhase("leave");
       document.body.style.overflow = previousOverflow;
+      router.replace(HOME_PATH);
     }, duration);
     const goneTimer = window.setTimeout(() => setPhase("gone"), duration + FADE_MS);
     return () => {
@@ -35,9 +68,9 @@ export function SplashScreen() {
       window.clearTimeout(leaveTimer);
       window.clearTimeout(goneTimer);
     };
-  }, []);
+  }, [active, isEntry, router]);
 
-  if (phase === "gone") return null;
+  if (!isEntry || phase === "gone" || !active) return null;
 
   return (
     <div

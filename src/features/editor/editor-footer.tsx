@@ -1,11 +1,27 @@
 "use client";
 
+import { useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ARTBOARD_MAX, ARTBOARD_MIN, ARTBOARD_PRESETS } from "@/features/editor/artboard";
+import { ColorInput } from "@/features/editor/color-input";
+import { editorQuiet } from "@/features/editor/editor-theme";
 import type { ArtboardState } from "@/features/editor/types";
 
-const quiet = "h-9 rounded-full border-[#d9d6e3] bg-white px-3 text-[#16141f] hover:bg-[#f4f2ec]";
+const quiet = editorQuiet;
+const field =
+  "h-9 rounded-lg border border-white/15 bg-[#100818]/90 text-sm text-white outline-none transition focus:border-[#c4b5fd]/45";
+const label = "text-[11px] tracking-[0.16em] text-white/45 uppercase";
+const divider = "hidden h-5 w-px shrink-0 bg-white/12 sm:block";
+const chevron =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' stroke='%23ffffff' stroke-opacity='0.7' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")";
+const CHEVRON_PAD = 28;
+
+function presetLabel(presetId: ArtboardState["presetId"]) {
+  if (presetId === "custom") return "Custom";
+  const preset = ARTBOARD_PRESETS.find((item) => item.id === presetId);
+  return preset ? `${preset.label} ${preset.width}×${preset.height}` : "Custom";
+}
 
 type EditorFooterProps = {
   zoom: number;
@@ -33,68 +49,145 @@ export function EditorFooter({
   onSnap,
 }: EditorFooterProps) {
   return (
-    <footer className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t border-[#e6e4ee] bg-white px-3 py-2 text-sm text-[#16141f]">
-      <div className="flex items-center gap-1">
-        <Button type="button" variant="outline" className={quiet} aria-label="Zoom out" onClick={onZoomOut}>
-          −
-        </Button>
-        <span className="w-12 text-center text-sm tabular-nums">{Math.round(zoom * 100)}%</span>
-        <Button type="button" variant="outline" className={quiet} aria-label="Zoom in" onClick={onZoomIn}>
-          +
-        </Button>
-        <Button type="button" variant="outline" className={quiet} onClick={onFit}>
-          Fit
-        </Button>
-      </div>
-      <label className="flex items-center gap-1.5 text-sm">
-        <input
-          type="checkbox"
-          checked={snap}
-          onChange={(event) => onSnap(event.target.checked)}
-        />
-        Snap
-      </label>
-      <label className="flex items-center gap-2 text-sm">
-        <span className="text-[#16141f]/55">Artboard</span>
-        <select
-          aria-label="Artboard preset"
-          value={artboard.presetId}
-          className="h-9 rounded-full border border-[#d9d6e3] bg-white px-3"
-          onChange={(event) => {
-            const presetId = event.target.value;
-            if (presetId === "custom") return;
-            onPreset(presetId as (typeof ARTBOARD_PRESETS)[number]["id"]);
-          }}
-        >
-          {ARTBOARD_PRESETS.map((preset) => (
-            <option key={preset.id} value={preset.id}>
-              {preset.label} {preset.width}×{preset.height}
-            </option>
-          ))}
-          <option value="custom">Custom</option>
-        </select>
-      </label>
-      <SizeFields width={artboard.width} height={artboard.height} onSize={onSize} />
-      <label className="flex items-center gap-2 text-sm">
-        <span className="text-[#16141f]/55">Background</span>
-        <input
-          type="color"
-          aria-label="Artboard background"
-          value={artboard.background ?? "#ffffff"}
-          disabled={artboard.background === null}
-          className="size-8 cursor-pointer rounded-lg border border-[#d9d6e3] bg-transparent disabled:opacity-40"
-          onChange={(event) => onBackground(event.target.value)}
-        />
-        <label className="flex items-center gap-1.5">
+    <footer className="relative shrink-0 border-t border-white/10 bg-[linear-gradient(0deg,rgba(26,18,48,0.97)_0%,rgba(10,6,22,0.96)_100%)] text-sm text-white backdrop-blur-xl">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-16 top-0 h-px bg-gradient-to-r from-transparent via-[#e9d5ff]/70 to-transparent"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-10 left-1/2 h-16 w-[42%] -translate-x-1/2 bg-[#7c3aed]/35 blur-3xl"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-8 left-[18%] h-12 w-40 bg-[#67e8f9]/15 blur-2xl"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-8 right-[18%] h-12 w-40 bg-[#ea580c]/18 blur-2xl"
+      />
+
+      <div className="relative mx-auto flex w-full max-w-6xl flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 py-2.5">
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            className={`${quiet} size-9 px-0`}
+            aria-label="Zoom out"
+            onClick={onZoomOut}
+          >
+            −
+          </Button>
+          <span className="min-w-11 text-center text-sm font-medium text-white/90 tabular-nums">
+            {Math.round(zoom * 100)}%
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            className={`${quiet} size-9 px-0`}
+            aria-label="Zoom in"
+            onClick={onZoomIn}
+          >
+            +
+          </Button>
+          <Button type="button" variant="outline" className={quiet} onClick={onFit}>
+            Fit
+          </Button>
+        </div>
+
+        <span aria-hidden="true" className={divider} />
+
+        <label className="flex cursor-pointer items-center gap-2 select-none">
           <input
             type="checkbox"
-            checked={artboard.background === null}
-            onChange={(event) => onBackground(event.target.checked ? null : "#ffffff")}
+            checked={snap}
+            className="size-3.5 accent-[#67e8f9]"
+            onChange={(event) => onSnap(event.target.checked)}
           />
-          Transparent
+          <span className="text-white/85">Snap</span>
         </label>
-      </label>
+
+        <span aria-hidden="true" className={divider} />
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className={label}>Artboard</span>
+          <PresetSelect value={artboard.presetId} onPreset={onPreset} />
+          <SizeFields width={artboard.width} height={artboard.height} onSize={onSize} />
+        </div>
+
+        <span aria-hidden="true" className={divider} />
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className={label}>Background</span>
+          <ColorInput
+            aria-label="Artboard background"
+            value={artboard.background ?? "#ffffff"}
+            disabled={artboard.background === null}
+            onChange={onBackground}
+          />
+          <label className="flex cursor-pointer items-center gap-1.5 select-none">
+            <input
+              type="checkbox"
+              className="size-3.5 accent-[#fdba74]"
+              checked={artboard.background === null}
+              onChange={(event) => onBackground(event.target.checked ? null : "#ffffff")}
+            />
+            <span className="text-white/85">Transparent</span>
+          </label>
+        </div>
+      </div>
     </footer>
+  );
+}
+
+function PresetSelect({
+  value,
+  onPreset,
+}: {
+  value: ArtboardState["presetId"];
+  onPreset: (presetId: (typeof ARTBOARD_PRESETS)[number]["id"]) => void;
+}) {
+  const text = presetLabel(value);
+  const measureRef = useRef<HTMLSpanElement>(null);
+  const [width, setWidth] = useState<number>();
+
+  useLayoutEffect(() => {
+    const next = measureRef.current?.offsetWidth;
+    if (next) setWidth(next + CHEVRON_PAD);
+  }, [text]);
+
+  return (
+    <span className="relative inline-flex">
+      <span
+        ref={measureRef}
+        aria-hidden="true"
+        className="pointer-events-none absolute top-0 left-0 -z-10 whitespace-nowrap opacity-0 pl-2.5 text-sm"
+      >
+        {text}
+      </span>
+      <select
+        aria-label="Artboard preset"
+        value={value}
+        className={`${field} appearance-none bg-[length:12px_12px] bg-no-repeat py-0 pr-7 pl-2.5`}
+        style={{
+          width: width ? `${width}px` : undefined,
+          backgroundImage: chevron,
+          backgroundPosition: "right 0.45rem center",
+        }}
+        onChange={(event) => {
+          const next = event.target.value;
+          if (next === "custom") return;
+          onPreset(next as (typeof ARTBOARD_PRESETS)[number]["id"]);
+        }}
+      >
+        {ARTBOARD_PRESETS.map((preset) => (
+          <option key={preset.id} value={preset.id}>
+            {preset.label} {preset.width}×{preset.height}
+          </option>
+        ))}
+        <option value="custom">Custom</option>
+      </select>
+    </span>
   );
 }
 
@@ -112,10 +205,10 @@ function SizeFields({
   }
 
   return (
-    <div className="flex items-center gap-1" title="Changing the artboard size does not move objects.">
+    <div className="flex items-center gap-1.5" title="Changing the artboard size does not move objects.">
       <Input
         key={`w-${width}`}
-        className="h-9 w-16 rounded-full border-[#d9d6e3] px-2"
+        className="h-9 w-16 rounded-lg border-white/15 bg-white/[0.04] px-2 text-center text-white"
         inputMode="numeric"
         aria-label="Artboard width"
         defaultValue={String(width)}
@@ -125,10 +218,10 @@ function SizeFields({
           commit(nextWidth, height);
         }}
       />
-      <span className="text-muted-foreground">×</span>
+      <span className="text-white/40">×</span>
       <Input
         key={`h-${height}`}
-        className="h-9 w-16 rounded-full border-[#d9d6e3] px-2"
+        className="h-9 w-16 rounded-lg border-white/15 bg-white/[0.04] px-2 text-center text-white"
         inputMode="numeric"
         aria-label="Artboard height"
         defaultValue={String(height)}

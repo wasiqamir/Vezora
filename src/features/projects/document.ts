@@ -71,6 +71,10 @@ const projectObjectSchema = z.object({
   endAngle: z.number().optional(),
   path: z.string().max(200000).optional(),
   fillRule: z.enum(["evenodd", "nonzero"]).optional(),
+  /** When true with path, cut the path out of an upload image (remainder / Base layer). */
+  clipInvert: z.boolean().optional(),
+  /** Extra SVG paths punched out after the main clip so child pieces do not leave ghosts. */
+  clipSubtract: z.string().max(200000).optional(),
   iconId: z.string().max(80).optional(),
   assetId: z.string().max(80).optional(),
   confidence: z.number().min(0).max(100).optional(),
@@ -90,6 +94,10 @@ export const projectDocumentSchema = z.object({
       jobId: z.string().min(1).max(80),
       sourceAssetId: z.string().min(1).max(80),
       note: z.string().max(240),
+      // When true, traced shapes stay on the artboard (Save as shapes). Default is exact upload.
+      keepShapes: z.boolean().optional(),
+      // Faint ring leftovers around punched pieces. Default true (keep). false = eat the rings.
+      keepEdgeOutlines: z.boolean().optional(),
     })
     .optional(),
 });
@@ -130,6 +138,110 @@ export function reassignObjectIds(document: ProjectDocument, nextId: () => strin
   };
 }
 
+function isUploadImage(object: ProjectObject) {
+  return object.type === "image" && (object.name === "Original" || object.name === "Logo") && Boolean(object.assetId);
+}
+
+/**
+ * Keep the exact uploaded bitmap as the editable logo.
+ * Traced Shape/OCR layers are a rough copy — toggling their eye stacks or fragments
+ * them (double BLOOM, stray circles). When the upload sits beside traces, keep only Logo.
+ * Shapes-only saves (no upload object) are left alone.
+ */
+/** Put only the exact upload on the artboard so edit view matches the side-by-side original. */
+export function exactLogoDocument(document: ProjectDocument, assetId: string): ProjectDocument {
+  const upload = document.objects.find(
+    (object) => object.type === "image" && object.assetId === assetId,
+  );
+  const logo: ProjectObject = upload
+    ? { ...upload, name: "Logo", visible: true, locked: false, opacity: 1, assetId }
+    : {
+        id: `obj_logo_${assetId.replace(/[^a-zA-Z0-9]/g, "").slice(-12) || "upload"}`,
+        type: "image",
+        name: "Logo",
+        x: 0,
+        y: 0,
+        width: document.artboard.width,
+        height: document.artboard.height,
+        scaleX: 1,
+        scaleY: 1,
+        angle: 0,
+        opacity: 1,
+        visible: true,
+        locked: false,
+        assetId,
+      };
+  return {
+    ...document,
+    objects: [logo],
+    reconstruction: document.reconstruction
+      ? {
+          ...document.reconstruction,
+          sourceAssetId: assetId,
+          keepShapes: false,
+          note: "Your exact upload is on the artboard as Logo — same as the original beside it.",
+        }
+      : {
+          jobId: `job_exact_${assetId.replace(/[^a-zA-Z0-9]/g, "").slice(-12) || "upload"}`,
+          sourceAssetId: assetId,
+          keepShapes: false,
+          note: "Your exact upload is on the artboard as Logo — same as the original beside it.",
+        },
+  };
+}
+
+export function preferExactUpload(document: ProjectDocument): ProjectDocument {
+  if (!document.reconstruction || document.reconstruction.keepShapes) return document;
+  const upload = document.objects.find(isUploadImage);
+  const traced = document.objects.filter((object) => !isUploadImage(object));
+  const assetId = upload?.assetId ?? (traced.length > 0 ? document.reconstruction.sourceAssetId : null);
+  if (!assetId) return document;
+
+  // Already a single clean Logo → no-op.
+  if (traced.length === 0 && upload) {
+    if (upload.name === "Logo" && upload.visible && !upload.locked && upload.opacity === 1) return document;
+    return {
+      ...document,
+      objects: [{ ...upload, name: "Logo", visible: true, locked: false, opacity: 1 }],
+      reconstruction: {
+        ...document.reconstruction,
+        keepShapes: false,
+        note: "Your exact upload is on the artboard as Logo. Edit that same image.",
+      },
+    };
+  }
+  if (traced.length === 0) return document;
+
+  const logo: ProjectObject = upload
+    ? { ...upload, name: "Logo", visible: true, locked: false, opacity: 1, assetId }
+    : {
+        id: `obj_logo_${assetId.replace(/[^a-zA-Z0-9]/g, "").slice(-12) || "upload"}`,
+        type: "image",
+        name: "Logo",
+        x: 0,
+        y: 0,
+        width: document.artboard.width,
+        height: document.artboard.height,
+        scaleX: 1,
+        scaleY: 1,
+        angle: 0,
+        opacity: 1,
+        visible: true,
+        locked: false,
+        assetId,
+      };
+
+  return {
+    ...document,
+    objects: [logo],
+    reconstruction: {
+      ...document.reconstruction,
+      keepShapes: false,
+      note: "Your exact upload is on the artboard as Logo. Edit that same image.",
+    },
+  };
+}
+
 export function sceneFromProject(document: ProjectDocument): SceneDocument {
   return {
     artboard: {
@@ -165,6 +277,10 @@ function sceneObjectFromProject(object: ProjectObject): SceneObject {
       ...(object.fontId ? { fontId: object.fontId } : {}),
       ...(object.assetId ? { assetId: object.assetId } : {}),
       ...(object.confidence !== undefined ? { confidence: object.confidence } : {}),
+      ...(object.type === "image" && object.path ? { clipPath: object.path } : {}),
+      ...(object.type === "image" && object.fillRule ? { clipRule: object.fillRule } : {}),
+      ...(object.clipInvert ? { clipInvert: true } : {}),
+      ...(object.clipSubtract ? { clipSubtract: object.clipSubtract } : {}),
     },
     visible: object.visible,
     locked: object.locked,
@@ -247,8 +363,12 @@ function projectObjectFromScene(object: SceneObject): ProjectObject {
     ...(object.points ? { points: object.points } : {}),
     ...(object.radius !== undefined ? { radius: object.radius } : {}),
     ...(object.startAngle !== undefined ? { startAngle: object.startAngle, endAngle: object.endAngle } : {}),
-    ...(object.path ? { path: object.path } : {}),
-    ...(object.fillRule ? { fillRule: object.fillRule } : {}),
+    ...(object.path || object.data.clipPath ? { path: object.path ?? object.data.clipPath } : {}),
+    ...(object.fillRule || object.data.clipRule
+      ? { fillRule: object.fillRule ?? object.data.clipRule }
+      : {}),
+    ...(object.data.clipInvert ? { clipInvert: true } : {}),
+    ...(object.data.clipSubtract ? { clipSubtract: object.data.clipSubtract } : {}),
     ...(object.data.iconId ? { iconId: object.data.iconId } : {}),
     ...(object.data.assetId ? { assetId: object.data.assetId } : {}),
     ...(object.data.confidence !== undefined

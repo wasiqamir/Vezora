@@ -9,7 +9,7 @@ const EditorWorkspace = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="grid h-full min-h-0 w-full flex-1 place-items-center text-sm text-muted-foreground">
+      <div className="grid h-full min-h-0 w-full flex-1 place-items-center bg-[#07041c] text-sm text-white/60">
         Opening the editor…
       </div>
     ),
@@ -21,13 +21,27 @@ export function EditorShell({
   projectName,
   document,
   fonts,
+  guest = false,
+  templateSlug,
+  openExport = false,
 }: {
   projectId: string;
   projectName: string;
   document: ProjectDocument;
   fonts: EditorFontOption[];
+  guest?: boolean;
+  templateSlug?: string;
+  openExport?: boolean;
 }) {
   return (
-    <EditorWorkspace projectId={projectId} projectName={projectName} document={document} fonts={fonts} />
+    <EditorWorkspace
+      projectId={projectId}
+      projectName={projectName}
+      document={document}
+      fonts={fonts}
+      guest={guest}
+      templateSlug={templateSlug}
+      openExport={openExport && !guest}
+    />
   );
 }

@@ -4,41 +4,48 @@ import { AuthError } from "next-auth";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { Prisma } from "@/generated/prisma/client";
 import { auth, signIn, signOut } from "@/lib/auth";
+import { safeCallbackUrl } from "@/lib/callback-url";
 import { getPrisma } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 import { createBlankProject } from "@/features/projects/store";
 
-const homePath = "/";
+const homePath = "/homepage";
 
 export async function signInAction(formData: FormData) {
+  const callbackUrl = safeCallbackUrl(formData.get("callbackUrl"), homePath);
   try {
     const destination = await signIn("credentials", {
       email: formData.get("email"),
       password: formData.get("password"),
       redirect: false,
-      redirectTo: homePath,
+      redirectTo: callbackUrl,
     });
-    if (signInFailed(destination)) redirect("/sign-in?error=1");
+    if (signInFailed(destination)) {
+      redirect(`/sign-in?error=1&callbackUrl=${encodeURIComponent(callbackUrl)}`);
+    }
   } catch (error) {
     unstable_rethrow(error);
-    if (error instanceof AuthError) redirect("/sign-in?error=1");
+    if (error instanceof AuthError) {
+      redirect(`/sign-in?error=1&callbackUrl=${encodeURIComponent(callbackUrl)}`);
+    }
     throw error;
   }
-  redirect(homePath);
+  redirect(callbackUrl);
 }
 
 export async function signUpAction(formData: FormData) {
+  const callbackUrl = safeCallbackUrl(formData.get("callbackUrl"), homePath);
   const name = String(formData.get("name") ?? "").trim().replace(/\s+/g, " ");
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
   if (name.length < 1 || name.length > 80 || !email.includes("@") || password.length < 8) {
-    redirect("/sign-up?error=invalid");
+    redirect(`/sign-up?error=invalid&callbackUrl=${encodeURIComponent(callbackUrl)}`);
   }
   const existing = await getPrisma().user.findFirst({
     where: { email: { equals: email, mode: "insensitive" } },
     select: { id: true },
   });
-  if (existing) redirect("/sign-up?error=exists");
+  if (existing) redirect(`/sign-up?error=exists&callbackUrl=${encodeURIComponent(callbackUrl)}`);
   let user;
   try {
     user = await getPrisma().user.create({
@@ -46,25 +53,34 @@ export async function signUpAction(formData: FormData) {
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      redirect("/sign-up?error=exists");
+      redirect(`/sign-up?error=exists&callbackUrl=${encodeURIComponent(callbackUrl)}`);
     }
     throw error;
   }
-  await createBlankProject(user.id);
+  // Guest claim/export already creates the project from the draft — skip a spare blank.
+  const claimingGuest =
+    callbackUrl.includes("/editor/try/") || callbackUrl.includes("/editor/new");
+  if (!claimingGuest) {
+    await createBlankProject(user.id);
+  }
   try {
     const destination = await signIn("credentials", {
       email,
       password,
       redirect: false,
-      redirectTo: homePath,
+      redirectTo: callbackUrl,
     });
-    if (signInFailed(destination)) redirect("/sign-in?error=1");
+    if (signInFailed(destination)) {
+      redirect(`/sign-in?error=1&callbackUrl=${encodeURIComponent(callbackUrl)}`);
+    }
   } catch (error) {
     unstable_rethrow(error);
-    if (error instanceof AuthError) redirect("/sign-in?error=1");
+    if (error instanceof AuthError) {
+      redirect(`/sign-in?error=1&callbackUrl=${encodeURIComponent(callbackUrl)}`);
+    }
     throw error;
   }
-  redirect(homePath);
+  redirect(callbackUrl);
 }
 
 function signInFailed(destination: unknown) {
@@ -72,7 +88,7 @@ function signInFailed(destination: unknown) {
 }
 
 export async function signOutAction() {
-  await signOut({ redirectTo: "/" });
+  await signOut({ redirectTo: "/homepage" });
 }
 
 export async function startProject() {

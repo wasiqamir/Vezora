@@ -72,7 +72,8 @@ function luminance(hex: string) {
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 
-function pathBounds(d: string) {
+/** Axis-aligned bounds from path commands (control points included; good enough for piece crops). */
+export function pathBounds(d: string) {
   const commands = tokenize(d);
   let x = 0;
   let y = 0;

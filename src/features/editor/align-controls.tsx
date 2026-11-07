@@ -25,14 +25,14 @@ export function AlignControls({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-xs text-muted-foreground">Align to artboard</h3>
+      <h3 className="text-xs text-white/55">Align to artboard</h3>
       <div className="grid grid-cols-3 gap-1">
         {EDGES.map((item) => (
           <Button
             key={item.edge}
             type="button"
             variant="outline"
-            className="px-1 text-xs"
+            className="border-white/15 bg-white/[0.04] px-1 text-xs text-white/85 hover:bg-white/10 hover:text-white"
             disabled={disabled}
             onClick={() => onAlign(item.edge)}
           >
@@ -44,7 +44,7 @@ export function AlignControls({
         <Button
           type="button"
           variant="outline"
-          className="px-1 text-xs"
+          className="border-white/15 bg-white/[0.04] px-1 text-xs text-white/85 hover:bg-white/10 hover:text-white"
           disabled={disabled || count < 3}
           onClick={() => onDistribute("horizontal")}
         >
@@ -53,7 +53,7 @@ export function AlignControls({
         <Button
           type="button"
           variant="outline"
-          className="px-1 text-xs"
+          className="border-white/15 bg-white/[0.04] px-1 text-xs text-white/85 hover:bg-white/10 hover:text-white"
           disabled={disabled || count < 3}
           onClick={() => onDistribute("vertical")}
         >

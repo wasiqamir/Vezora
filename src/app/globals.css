@@ -137,6 +137,72 @@
   }
 }
 
+@keyframes vezora-glow {
+  from {
+    opacity: 0.4;
+    transform: translate3d(-2%, 0, 0) scale(0.96);
+  }
+  to {
+    opacity: 0.85;
+    transform: translate3d(2%, 3%, 0) scale(1.06);
+  }
+}
+
+@keyframes vezora-float {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, -14px, 0);
+  }
+}
+
+@keyframes vezora-float-slow {
+  from {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  to {
+    transform: translate3d(10px, -18px, 0) rotate(2deg);
+  }
+}
+
+@keyframes vezora-line {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes vezora-shimmer {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes vezora-ken {
+  from {
+    transform: scale(1.04);
+  }
+  to {
+    transform: scale(1.12);
+  }
+}
+
+@keyframes vezora-pulse-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(196, 181, 253, 0.18);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(196, 181, 253, 0);
+  }
+}
+
 .auth-rise {
   animation: vezora-rise 700ms ease both;
 }
@@ -145,10 +211,193 @@
   animation: vezora-drift 18s ease-in-out infinite alternate;
 }
 
+.home-reveal {
+  opacity: 0;
+  transform: translateY(32px);
+  filter: blur(6px);
+  transition:
+    opacity 800ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 800ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 800ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.home-reveal[data-from="left"] {
+  transform: translateX(-28px);
+}
+
+.home-reveal[data-from="right"] {
+  transform: translateX(28px);
+}
+
+.home-reveal[data-from="scale"] {
+  transform: scale(0.94);
+}
+
+.home-reveal[data-show="true"] {
+  opacity: 1;
+  transform: none;
+  filter: blur(0);
+}
+
+.home-glow {
+  animation: vezora-glow 7s ease-in-out infinite alternate;
+}
+
+.home-glow-delay {
+  animation: vezora-glow 9s ease-in-out infinite alternate-reverse;
+}
+
+.home-float {
+  animation: vezora-float 5.5s ease-in-out infinite alternate;
+}
+
+.home-float-slow {
+  animation: vezora-float-slow 8s ease-in-out infinite alternate;
+}
+
+.home-line {
+  transform-origin: left center;
+}
+
+.home-reveal[data-show="true"] .home-line {
+  animation: vezora-line 900ms ease both;
+}
+
+.home-shimmer {
+  background-size: 200% 200%;
+  animation: vezora-shimmer 4.5s ease-in-out infinite alternate;
+}
+
+.home-ken {
+  animation: vezora-ken 18s ease-in-out infinite alternate;
+}
+
+.home-card {
+  transition:
+    transform 350ms ease,
+    border-color 350ms ease,
+    box-shadow 350ms ease,
+    background-color 350ms ease;
+}
+
+.home-card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(255, 255, 255, 0.22);
+  background-color: rgba(255, 255, 255, 0.055);
+  box-shadow: 0 22px 50px -28px rgba(124, 58, 237, 0.55);
+}
+
+.template-card {
+  transition:
+    transform 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 380ms ease,
+    box-shadow 380ms ease;
+}
+
+.template-card:hover {
+  transform: translateY(-8px);
+  border-color: rgba(228, 212, 255, 0.28);
+  box-shadow:
+    0 34px 70px -30px rgba(124, 58, 237, 0.55),
+    0 18px 40px -28px rgba(234, 88, 12, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.home-preview {
+  animation: vezora-float 6.5s ease-in-out infinite alternate;
+  transition: box-shadow 400ms ease;
+}
+
+.home-preview:hover {
+  box-shadow:
+    0 34px 80px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(196, 181, 253, 0.22);
+}
+
+.home-cta {
+  position: relative;
+  transition:
+    transform 250ms ease,
+    box-shadow 250ms ease;
+}
+
+.home-cta:hover {
+  transform: translateY(-3px);
+}
+
+.home-cta-glow::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 9999px;
+  z-index: -1;
+  background: linear-gradient(120deg, #67e8f9, #c4b5fd, #fdba74, #67e8f9);
+  background-size: 220% 220%;
+  opacity: 0.55;
+  filter: blur(10px);
+  animation: vezora-shimmer 3.5s linear infinite;
+}
+
+.home-hero-copy > * {
+  opacity: 0;
+  transform: translateY(18px);
+  animation: vezora-rise 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.home-hero-copy > *:nth-child(1) {
+  animation-delay: 80ms;
+}
+
+.home-hero-copy > *:nth-child(2) {
+  animation-delay: 180ms;
+}
+
+.home-hero-copy > *:nth-child(3) {
+  animation-delay: 280ms;
+}
+
+.home-hero-copy > *:nth-child(4) {
+  animation-delay: 380ms;
+}
+
+.home-hero-copy > *:nth-child(5) {
+  animation-delay: 480ms;
+}
+
+.home-mark-pulse {
+  animation: vezora-pulse-ring 3.2s ease-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .auth-rise,
-  .auth-drift {
+  .auth-drift,
+  .home-glow,
+  .home-glow-delay,
+  .home-float,
+  .home-float-slow,
+  .home-line,
+  .home-shimmer,
+  .home-ken,
+  .home-preview,
+  .home-cta-glow::after,
+  .home-hero-copy > *,
+  .home-mark-pulse {
     animation: none;
+  }
+
+  .home-reveal,
+  .home-hero-copy > * {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    transition: none;
+  }
+
+  .home-card:hover,
+  .template-card:hover,
+  .home-cta:hover,
+  .home-preview:hover {
+    transform: none;
   }
 }
 
@@ -156,10 +405,90 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
+
   html {
     @apply font-sans;
+  }
+}
+
+/* Outside @layer so Chrome keeps the custom thumb. Do not set scrollbar-color on Chromium. */
+html {
+  scrollbar-gutter: stable;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(103, 232, 249, 0.12),
+      transparent 24%,
+      transparent 76%,
+      rgba(251, 146, 60, 0.14)
+    ),
+    #0b0718;
+  border-left: 1px solid rgba(196, 181, 253, 0.18);
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  background:
+    linear-gradient(180deg, #67e8f9 0%, #a78bfa 46%, #fdba74 100%) padding-box,
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.05)) border-box;
+  background-clip: padding-box, border-box;
+  box-shadow:
+    0 0 16px rgba(167, 139, 250, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:hover {
+  background:
+    linear-gradient(180deg, #a5f3fc 0%, #c4b5fd 46%, #fdba74 100%) padding-box,
+    linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.08)) border-box;
+  background-clip: padding-box, border-box;
+  box-shadow:
+    0 0 22px rgba(196, 181, 253, 0.8),
+    0 0 12px rgba(251, 146, 60, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+html::-webkit-scrollbar-thumb:active,
+body::-webkit-scrollbar-thumb:active,
+*::-webkit-scrollbar-thumb:active {
+  background:
+    linear-gradient(180deg, #22d3ee 0%, #8b5cf6 50%, #f97316 100%) padding-box,
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.05)) border-box;
+  background-clip: padding-box, border-box;
+}
+
+html::-webkit-scrollbar-corner,
+body::-webkit-scrollbar-corner,
+*::-webkit-scrollbar-corner {
+  background: #0b0718;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  html,
+  body,
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #a78bfa #120a22;
   }
 }

@@ -98,7 +98,7 @@ export function Toolbar({
   const hasSelection = selectionCount > 0;
 
   return (
-    <div className="flex min-h-0 w-[9.25rem] shrink-0 flex-col gap-3 overflow-y-auto border-r border-[#e6e4ee] bg-white px-2 py-3 [scrollbar-width:thin]">
+    <div className="flex min-h-0 w-[9.25rem] shrink-0 flex-col gap-3 overflow-y-auto border-r border-white/10 bg-[#100818]/95 px-2 py-3 text-white [scrollbar-width:thin]">
       <ToolGroup label="Draw">
         <ToolButton label="Select" purpose="Move, resize, or rotate what is on the canvas." icon={<MousePointer2 />} pressed={tool === "select"} onClick={() => onTool("select")} />
         <ToolButton
@@ -136,9 +136,9 @@ export function Toolbar({
             onClick={onToggleIcons}
           />
           {iconPickerOpen ? (
-            <div className="absolute top-0 left-full z-20 ml-2 w-56 rounded-2xl border border-[#e6e4ee] bg-white p-2 shadow-[0_16px_40px_rgba(22,20,31,0.12)]">
-              <p className="px-1 text-xs font-medium">Icons</p>
-              <p className="px-1 pb-2 text-[11px] text-muted-foreground">
+            <div className="absolute top-0 left-full z-20 ml-2 w-56 rounded-2xl border border-white/10 bg-[#160c24] p-2 shadow-[0_16px_40px_rgba(0,0,0,0.45)]">
+              <p className="px-1 text-xs font-medium text-white">Icons</p>
+              <p className="px-1 pb-2 text-[11px] text-white/55">
                 Simple symbols. Draw a character from the shapes.
               </p>
               <div className="grid grid-cols-4 gap-1">
@@ -146,7 +146,7 @@ export function Toolbar({
                   <HoverTip key={icon.id} purpose={`Add the ${icon.name} symbol.`}>
                   <button
                     type="button"
-                    className="grid aspect-square w-full place-items-center rounded-lg border hover:bg-muted"
+                    className="grid aspect-square w-full place-items-center rounded-lg border border-white/10 text-white hover:bg-white/10"
                     aria-label={`Add the ${icon.name} symbol.`}
                     onClick={() => onAddIcon(icon.id)}
                   >
@@ -259,7 +259,7 @@ export function Toolbar({
 function ToolGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-1">
-      <p className="px-1 text-[10px] font-medium tracking-[0.14em] text-[#6d5bd0] uppercase">{label}</p>
+      <p className="px-1 text-[10px] font-medium tracking-[0.14em] text-[#d8b4fe] uppercase">{label}</p>
       <div className="grid grid-cols-2 gap-1">{children}</div>
     </section>
   );
@@ -286,8 +286,8 @@ function ToolButton({
         type="button"
         variant="ghost"
         className={cn(
-          "h-auto w-full flex-col gap-1 rounded-xl px-1 py-1.5 text-[11px] leading-none font-medium whitespace-normal text-[#16141f] hover:bg-[#f4f2ec] [&_svg]:size-4",
-          pressed && "bg-[#16141f] text-white hover:bg-[#2a2640]",
+          "h-auto w-full flex-col gap-1 rounded-xl px-1 py-1.5 text-[11px] leading-none font-medium whitespace-normal text-white/80 hover:bg-white/10 hover:text-white [&_svg]:size-4",
+          pressed && "bg-white/16 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-white/20",
         )}
         aria-pressed={pressed}
         aria-label={`${label}. ${purpose}`}
@@ -320,7 +320,7 @@ function HoverTip({ purpose, children }: { purpose: string; children: ReactNode 
         ? createPortal(
             <span
               role="tooltip"
-              className="pointer-events-none fixed z-50 max-w-56 -translate-y-1/2 rounded-xl border border-[#e6e4ee] bg-white px-2.5 py-1.5 text-left text-xs leading-snug text-[#16141f] shadow-md"
+              className="pointer-events-none fixed z-50 max-w-56 -translate-y-1/2 rounded-xl border border-white/15 bg-[#160c24] px-2.5 py-1.5 text-left text-xs leading-snug text-white shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
               style={{ top: tip.top, left: tip.left }}
             >
               {purpose}

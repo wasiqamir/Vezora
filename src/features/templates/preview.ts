@@ -26,7 +26,10 @@ function shape(object: ProjectObject) {
     const weight = object.fontWeight ?? 500;
     const family = escapeXml(object.fontFamily ?? "Outfit");
     const spacing = ((object.letterSpacing ?? 0) / 1000) * size;
-    return `<text x="${object.x}" y="${object.y + size * 0.82}" fill="${fill}" font-family="${family}, sans-serif" font-size="${size}" font-weight="${weight}" letter-spacing="${spacing}">${escapeXml(object.text ?? "")}</text>`;
+    const align = object.textAlign ?? "left";
+    const anchor = align === "center" ? "middle" : align === "right" ? "end" : "start";
+    const x = align === "center" ? object.x + object.width / 2 : align === "right" ? object.x + object.width : object.x;
+    return `<text x="${x}" y="${object.y + size * 0.82}" text-anchor="${anchor}" fill="${fill}" font-family="${family}, sans-serif" font-size="${size}" font-weight="${weight}" letter-spacing="${spacing}">${escapeXml(object.text ?? "")}</text>`;
   }
   if (object.type === "path" && object.path) {
     const rule = object.fillRule === "evenodd" ? "evenodd" : "nonzero";

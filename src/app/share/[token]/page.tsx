@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { connection } from "next/server";
+import { PageFallback } from "@/components/page-fallback";
 import { DesignPreview } from "@/features/projects/design-preview";
 import { getSharedProject } from "@/features/projects/store";
 import { isResourceId } from "@/features/reliability/limits";
@@ -8,7 +9,7 @@ import { buttonVariants } from "@/components/ui/button";
 
 export default function SharePage({ params }: { params: Promise<{ token: string }> }) {
   return (
-    <Suspense fallback={<p className="px-4 py-10 text-sm text-muted-foreground">Loading this design…</p>}>
+    <Suspense fallback={<PageFallback tone="muted" />}>
       <ShareContent params={params} />
     </Suspense>
   );

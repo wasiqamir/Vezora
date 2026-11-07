@@ -56,4 +56,58 @@ export const starterTemplates = [
     category: "Agency",
     description: "Icon on the left, name and service on the right.",
   },
+  {
+    slug: "pulse",
+    name: "Pulse",
+    category: "Startup",
+    description: "Signal bars mark with a bold electric wordmark.",
+  },
+  {
+    slug: "orbit-lab",
+    name: "Orbit Lab",
+    category: "Startup",
+    description: "Orbit icon beside a sharp modern name lockup.",
+  },
+  {
+    slug: "volt",
+    name: "Volt",
+    category: "Startup",
+    description: "Spark mark with a high-energy stacked wordmark.",
+  },
+  {
+    slug: "bloom-atelier",
+    name: "Bloom Atelier",
+    category: "Freelancer",
+    description: "Bloom icon with a refined personal studio name.",
+  },
+  {
+    slug: "forge",
+    name: "Forge",
+    category: "Freelancer",
+    description: "Diamond mark with a strong monogram lockup.",
+  },
+  {
+    slug: "grove",
+    name: "Grove",
+    category: "Local business",
+    description: "Leaf mark with a warm local shop wordmark.",
+  },
+  {
+    slug: "ember-badge",
+    name: "Ember Badge",
+    category: "Local business",
+    description: "North mark inside a bold circular shop badge.",
+  },
+  {
+    slug: "nova-frame",
+    name: "Nova Frame",
+    category: "Agency",
+    description: "Frame icon with a wide agency wordmark and accent bar.",
+  },
+  {
+    slug: "vector-grid",
+    name: "Vector Grid",
+    category: "Agency",
+    description: "Geometric blocks and a clean agency wordmark.",
+  },
 ] as const;

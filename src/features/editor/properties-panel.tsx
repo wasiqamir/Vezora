@@ -1,17 +1,18 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { AlignControls } from "@/features/editor/align-controls";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { AlignEdge } from "@/features/editor/align";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PanelSelect } from "@/components/ui/panel-select";
+import { ColorInput } from "@/features/editor/color-input";
 import type { EditorFontOption, EditorTool, SelectionPatch, SelectionSnapshot } from "@/features/editor/types";
 
 const WEIGHTS = [
-  { value: 400, label: "Regular" },
-  { value: 500, label: "Medium" },
-  { value: 600, label: "Semibold" },
-  { value: 700, label: "Bold" },
+  { value: "400", label: "Regular" },
+  { value: "500", label: "Medium" },
+  { value: "600", label: "Semibold" },
+  { value: "700", label: "Bold" },
 ];
 
 type PropertiesPanelProps = {
@@ -34,229 +35,138 @@ export function PropertiesPanel({
   fonts,
   selection,
   selectionCount,
-  tool,
-  offsetDistance,
-  onOffsetDistance,
   onPatch,
   onFlipPath,
   onStraighten,
   onDuplicate,
   onDelete,
-  onAlign,
-  onDistribute,
 }: PropertiesPanelProps) {
   return (
-    <div className="flex flex-col gap-4 border-b border-[#e6e4ee] p-4">
-      <h2 className="text-xs font-medium tracking-[0.16em] text-[#6d5bd0] uppercase">Properties</h2>
-      <NumberField
-        resetKey={`offset:${offsetDistance}`}
-        label="Offset"
-        value={offsetDistance}
-        min={-400}
-        max={400}
-        onCommit={onOffsetDistance}
-      />
-      <p className="text-xs text-muted-foreground">
-        Positive grows the Offset copy. Negative shrinks it.
-      </p>
-      {tool === "pen" ? (
-        <p className="text-sm text-muted-foreground">
-          Click to add points. Drag to curve a point. Click the first point to close. Enter finishes, Escape cancels.
+    <div className="flex flex-col gap-5 border-b border-white/10 p-5 text-white">
+      <div>
+        <p className="text-[11px] tracking-[0.28em] text-white/40 uppercase">Inspect</p>
+        <h2 className="mt-1 text-lg font-semibold tracking-tight text-white">Style</h2>
+      </div>
+
+      {selectionCount === 0 ? (
+        <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-5 text-sm leading-relaxed text-white/55">
+          Select anything on the artboard to edit its look.
         </p>
       ) : null}
-      {tool === "nodes" ? (
-        <p className="text-sm text-muted-foreground">Drag a point. The curves on either side keep their shape.</p>
-      ) : null}
+
       {selectionCount > 1 ? (
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">{selectionCount} objects selected.</p>
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-white/60">{selectionCount} selected</p>
           <ActionRow onDuplicate={onDuplicate} onDelete={onDelete} />
-          <AlignControls
-            count={selectionCount}
-            disabled={false}
-            onAlign={onAlign}
-            onDistribute={onDistribute}
-          />
         </div>
       ) : null}
-      {selectionCount === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Build the mark yourself. Add a shape, duplicate it, and flip it to mirror a side. On path bends a word along a shape. Outline turns a stroke into a shape. Trace and SVG bring a drawing in.
-        </p>
-      ) : null}
+
       {selection ? (
-        <div className="flex flex-col gap-4">
-          <Field label="Name">
-            <Input
-              value={selection.name}
-              aria-label="Name"
-              onChange={(event) => onPatch({ name: event.target.value })}
-            />
-          </Field>
-          {selection.locked ? (
-            <p className="text-xs text-muted-foreground">
-              Locked. Unlock it in the layers list to move it.
-            </p>
-          ) : null}
+        <div className="flex flex-col gap-5">
           {selection.type === "text" ? (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3.5">
               <Field label="Text">
                 <textarea
                   value={selection.text ?? ""}
                   aria-label="Text"
                   rows={2}
-                  className="w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  className="w-full resize-none rounded-xl border border-white/12 bg-white/[0.04] px-3 py-2.5 text-sm text-white outline-none focus-visible:border-[#c4b5fd]/55 focus-visible:ring-3 focus-visible:ring-[#c4b5fd]/20"
                   onChange={(event) => onPatch({ text: event.target.value })}
                 />
               </Field>
               <Field label="Font">
-                <Select
+                <PanelSelect
                   ariaLabel="Font"
                   value={selection.fontId ?? "outfit"}
                   onChange={(value) => onPatch({ fontId: value })}
-                >
-                  {fontGroups(fonts).map((group) => (
-                    <optgroup key={group.category} label={group.category}>
-                      {group.fonts.map((font) => (
-                        <option key={font.id} value={font.id}>
-                          {font.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </Select>
+                  groups={fontGroups(fonts).map((group) => ({
+                    category: group.category,
+                    options: group.fonts.map((font) => ({ value: font.id, label: font.label })),
+                  }))}
+                />
               </Field>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <NumberField
-                  resetKey={`${selection.id}:size:${selection.fontSize}`}
+                  resetKey={`${selection.id}:size`}
                   label="Size"
                   value={selection.fontSize ?? 72}
                   min={8}
                   max={500}
+                  live
                   onCommit={(fontSize) => onPatch({ fontSize })}
                 />
                 <Field label="Weight">
-                  <Select
+                  <PanelSelect
                     ariaLabel="Weight"
                     value={String(selection.fontWeight ?? 500)}
                     onChange={(value) => onPatch({ fontWeight: Number(value) })}
-                  >
-                    {WEIGHTS.map((weight) => (
-                      <option key={weight.value} value={weight.value}>
-                        {weight.label}
-                      </option>
-                    ))}
-                  </Select>
+                    options={WEIGHTS}
+                  />
                 </Field>
               </div>
               {selection.onPath ? (
-                <div className="flex flex-col gap-2">
-                  <NumberField
-                    resetKey={`${selection.id}:path:${selection.pathStartOffset ?? 0}`}
-                    label="Path start"
-                    value={selection.pathStartOffset ?? 0}
-                    min={-2000}
-                    max={2000}
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 rounded-full border-white/15 bg-white/[0.04] text-white hover:bg-white/10 hover:text-white"
                     disabled={selection.locked}
-                    onCommit={(pathStartOffset) => onPatch({ pathStartOffset })}
-                  />
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" disabled={selection.locked} onClick={onFlipPath}>
-                      Flip side
-                    </Button>
-                    <Button type="button" variant="outline" disabled={selection.locked} onClick={onStraighten}>
-                      Straighten
-                    </Button>
-                  </div>
+                    onClick={onFlipPath}
+                  >
+                    Flip path
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 rounded-full border-white/15 bg-white/[0.04] text-white hover:bg-white/10 hover:text-white"
+                    disabled={selection.locked}
+                    onClick={onStraighten}
+                  >
+                    Straighten
+                  </Button>
                 </div>
               ) : null}
             </div>
           ) : null}
-          {selection.type === "line" ? null : (
-            <ColorField
-              label="Fill"
-              value={selection.fill}
-              onChange={(fill) => onPatch({ fill })}
-            />
-          )}
-          <ColorField
-            label="Stroke"
-            value={selection.stroke}
-            onChange={(stroke) => onPatch({ stroke })}
-          />
-          <NumberField
-            resetKey={`${selection.id}:stroke:${selection.strokeWidth}`}
-            label="Stroke width"
-            value={selection.strokeWidth}
-            min={0}
-            max={80}
-            onCommit={(strokeWidth) => onPatch({ strokeWidth })}
-          />
-          {selection.type === "rect" ? (
+
+          <div className="grid grid-cols-2 gap-3">
+            {selection.type === "line" ? null : (
+              <ColorField
+                label={selection.type === "image" ? "Color" : "Fill"}
+                value={selection.fill}
+                emptySwatch={selection.sourceColor ?? undefined}
+                originalWhenEmpty={selection.type === "image"}
+                onChange={(fill) => onPatch({ fill })}
+              />
+            )}
+            {selection.type === "image" ? null : (
+              <ColorField label="Stroke" value={selection.stroke} onChange={(stroke) => onPatch({ stroke })} />
+            )}
+          </div>
+
+          {selection.stroke ? (
             <NumberField
-              resetKey={`${selection.id}:corner:${selection.cornerRadius ?? 0}`}
-              label="Corner"
-              value={selection.cornerRadius ?? 0}
+              resetKey={`${selection.id}:stroke:${selection.strokeWidth}`}
+              label="Stroke width"
+              value={selection.strokeWidth}
               min={0}
-              max={400}
-              onCommit={(cornerRadius) => onPatch({ cornerRadius })}
+              max={80}
+              onCommit={(strokeWidth) => onPatch({ strokeWidth })}
             />
           ) : null}
+
           <Field label={`Opacity ${Math.round(selection.opacity * 100)}%`}>
             <input
               type="range"
               min={0}
               max={100}
               aria-label="Opacity"
+              className="w-full accent-[#c4b5fd]"
               value={Math.round(selection.opacity * 100)}
               onChange={(event) => onPatch({ opacity: Number(event.target.value) / 100 })}
             />
           </Field>
-          <div className="grid grid-cols-2 gap-2">
-            <NumberField
-              resetKey={`${selection.id}:x:${selection.x}`}
-              label="X"
-              value={selection.x}
-              disabled={selection.locked}
-              onCommit={(x) => onPatch({ x })}
-            />
-            <NumberField
-              resetKey={`${selection.id}:y:${selection.y}`}
-              label="Y"
-              value={selection.y}
-              disabled={selection.locked}
-              onCommit={(y) => onPatch({ y })}
-            />
-            <NumberField
-              resetKey={`${selection.id}:w:${selection.width}`}
-              label="W"
-              value={selection.width}
-              min={1}
-              disabled={selection.locked}
-              onCommit={(width) => onPatch({ width })}
-            />
-            <NumberField
-              resetKey={`${selection.id}:h:${selection.height}`}
-              label="H"
-              value={selection.height}
-              min={1}
-              disabled={selection.locked}
-              onCommit={(height) => onPatch({ height })}
-            />
-          </div>
-          <NumberField
-            resetKey={`${selection.id}:angle:${selection.angle}`}
-            label="Rotation"
-            value={selection.angle}
-            disabled={selection.locked}
-            onCommit={(angle) => onPatch({ angle })}
-          />
-          <AlignControls
-            count={selectionCount}
-            disabled={selection.locked}
-            onAlign={onAlign}
-            onDistribute={onDistribute}
-          />
+
           <ActionRow onDuplicate={onDuplicate} onDelete={onDelete} />
         </div>
       ) : null}
@@ -273,10 +183,15 @@ function ActionRow({
 }) {
   return (
     <div className="flex gap-2">
-      <Button type="button" variant="outline" onClick={onDuplicate}>
+      <Button
+        type="button"
+        variant="outline"
+        className="flex-1 rounded-full border-white/15 bg-white/[0.04] text-white hover:bg-white/10 hover:text-white"
+        onClick={onDuplicate}
+      >
         Duplicate
       </Button>
-      <Button type="button" variant="destructive" onClick={onDelete}>
+      <Button type="button" variant="destructive" className="flex-1 rounded-full" onClick={onDelete}>
         Delete
       </Button>
     </div>
@@ -285,7 +200,7 @@ function ActionRow({
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+    <label className="flex flex-col gap-1.5 text-[11px] tracking-[0.14em] text-white/45 uppercase">
       {label}
       {children}
     </label>
@@ -302,57 +217,46 @@ function fontGroups(fonts: EditorFontOption[]) {
   return groups;
 }
 
-function Select({
-  ariaLabel,
-  value,
-  onChange,
-  children,
-}: {
-  ariaLabel: string;
-  value: string;
-  onChange: (value: string) => void;
-  children: ReactNode;
-}) {
-  return (
-    <select
-      aria-label={ariaLabel}
-      value={value}
-      className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm text-foreground"
-      onChange={(event) => onChange(event.target.value)}
-    >
-      {children}
-    </select>
-  );
-}
-
 function ColorField({
   label,
   value,
   onChange,
+  originalWhenEmpty = false,
+  emptySwatch,
 }: {
   label: string;
   value: string | null;
   onChange: (value: string | null) => void;
+  /** Image pieces: empty means original pixels; keep the picker enabled. */
+  originalWhenEmpty?: boolean;
+  /** Swatch shown when value is empty (sampled piece color). */
+  emptySwatch?: string;
 }) {
+  const empty = value === null;
   return (
     <Field label={label}>
-      <span className="flex items-center gap-2">
-        <input
-          type="color"
+      <span className="flex h-10 items-center gap-2 rounded-xl border border-white/12 bg-white/[0.04] px-2">
+        <ColorInput
           aria-label={`${label} color`}
-          value={value ?? "#171717"}
-          disabled={value === null}
-          className="size-8 cursor-pointer rounded border border-input bg-transparent disabled:cursor-not-allowed disabled:opacity-40"
-          onChange={(event) => onChange(event.target.value)}
+          className="size-7"
+          value={value ?? emptySwatch ?? (originalWhenEmpty ? "#c45c7a" : "#171717")}
+          disabled={empty && !originalWhenEmpty}
+          onChange={onChange}
         />
-        <label className="flex items-center gap-1.5 text-sm text-foreground">
-          <input
-            type="checkbox"
-            checked={value === null}
-            onChange={(event) => onChange(event.target.checked ? null : "#171717")}
-          />
-          None
-        </label>
+        <button
+          type="button"
+          className="text-[11px] tracking-normal text-white/55 normal-case hover:text-white disabled:opacity-40"
+          disabled={originalWhenEmpty && empty}
+          onClick={() => {
+            if (originalWhenEmpty) {
+              if (!empty) onChange(null);
+              return;
+            }
+            onChange(empty ? "#171717" : null);
+          }}
+        >
+          {originalWhenEmpty ? (empty ? "Original" : "Reset") : empty ? "Off" : "None"}
+        </button>
       </span>
     </Field>
   );
@@ -365,6 +269,7 @@ function NumberField({
   min,
   max,
   disabled = false,
+  live = false,
   onCommit,
 }: {
   resetKey: string;
@@ -373,25 +278,58 @@ function NumberField({
   min?: number;
   max?: number;
   disabled?: boolean;
+  /** Apply as digits are typed (no Enter / blur needed). */
+  live?: boolean;
   onCommit: (value: number) => void;
 }) {
+  const [draft, setDraft] = useState(String(value));
+  const focusedRef = useRef(false);
+
+  // Sync from the canvas when selection changes — not while the user is mid-typing.
+  useEffect(() => {
+    if (!focusedRef.current) setDraft(String(value));
+  }, [resetKey, value]);
+
+  const clampNumber = (next: number) =>
+    Math.min(max ?? next, Math.max(min ?? next, Math.round(next)));
+
+  const commit = (raw: string, { force }: { force: boolean }) => {
+    const trimmed = raw.trim();
+    if (trimmed === "" || trimmed === "-" || trimmed === ".") {
+      if (force) setDraft(String(value));
+      return;
+    }
+    const next = Number(trimmed);
+    if (!Number.isFinite(next)) {
+      if (force) setDraft(String(value));
+      return;
+    }
+    const clamped = clampNumber(next);
+    if (force) setDraft(String(clamped));
+    if (clamped !== value) onCommit(clamped);
+  };
+
   return (
     <Field label={label}>
       <Input
-        key={resetKey}
         inputMode="numeric"
         aria-label={label}
         disabled={disabled}
-        defaultValue={String(value)}
-        onBlur={(event) => {
-          const next = Number(event.currentTarget.value);
-          if (!Number.isFinite(next)) {
-            event.currentTarget.value = String(value);
-            return;
-          }
-          const clamped = Math.min(max ?? next, Math.max(min ?? next, Math.round(next)));
-          event.currentTarget.value = String(clamped);
-          if (clamped !== value) onCommit(clamped);
+        className="h-10 rounded-xl border-white/12 bg-white/[0.04] text-sm tracking-normal text-white normal-case"
+        value={draft}
+        onFocus={() => {
+          focusedRef.current = true;
+        }}
+        onChange={(event) => {
+          const raw = event.currentTarget.value;
+          // Allow clearing / partial digits while typing.
+          if (raw !== "" && !/^-?\d*\.?\d*$/.test(raw)) return;
+          setDraft(raw);
+          if (live) commit(raw, { force: false });
+        }}
+        onBlur={() => {
+          focusedRef.current = false;
+          commit(draft, { force: true });
         }}
         onKeyDown={(event) => {
           if (event.key === "Enter") event.currentTarget.blur();

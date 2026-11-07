@@ -59,8 +59,13 @@ import {
   type PenPoint,
 } from "@/features/editor/path-geometry";
 import { combineOutlines, offsetOutline, strokeToFill, type CombineOp } from "@/features/editor/path-ops";
-import type { ProjectDocument } from "@/features/projects/document";
-import { projectFromScene, sceneFromProject } from "@/features/projects/document";
+import {
+  preferExactUpload,
+  projectFromScene,
+  sceneFromProject,
+  type ProjectDocument,
+} from "@/features/projects/document";
+import { pathBounds } from "@/features/reconstruction/paths";
 import type { SceneDocument, SceneObject } from "@/features/editor/scene";
 import type {
   ArtboardPresetId,
@@ -105,10 +110,22 @@ function hexColor(value: unknown): string | null {
     .join("")}`;
 }
 
+function hexToRgb(value: string): { r: number; g: number; b: number } | null {
+  const hex = hexColor(value);
+  if (!hex) return null;
+  return {
+    r: Number.parseInt(hex.slice(1, 3), 16),
+    g: Number.parseInt(hex.slice(3, 5), 16),
+    b: Number.parseInt(hex.slice(5, 7), 16),
+  };
+}
+
 export class CanvasController {
   private readonly canvas: Canvas;
   private readonly artboard: Rect;
   private readonly data = new Map<FabricObject, LogoObjectData>();
+  /** Un-recolored clipped piece bitmaps — fill edits paint over a copy of these. */
+  private readonly imagePieceBases = new WeakMap<FabricObject, HTMLCanvasElement>();
   private readonly counts = new Map<string, number>();
   private readonly listeners = new Set<Listener>();
   private readonly fonts: EditorFontOption[];
@@ -338,11 +355,14 @@ export class CanvasController {
   }
 
   async addUploadedImage(assetId: string, url: string) {
-    const image = await FabricImage.fromURL(url);
-    this.imageUrls.add(url);
+    // FabricImage defaults to center/center; the rest of the editor positions by top-left.
+    const image = await FabricImage.fromURL(url, {}, { originX: "left", originY: "top" });
+    const { isGuestAssetId } = await import("@/features/editor/guest-assets");
+    // Guest registry owns object URLs; only revoke canvas-created blobs on dispose.
+    if (!isGuestAssetId(assetId)) this.imageUrls.add(url);
     const maxEdge = 320;
     const scale = Math.min(maxEdge / (image.width || maxEdge), maxEdge / (image.height || maxEdge), 1);
-    image.set({ scaleX: scale, scaleY: scale });
+    image.set({ originX: "left", originY: "top", scaleX: scale, scaleY: scale });
     this.addObject(image, {
       id: createObjectId(),
       type: "image",
@@ -765,7 +785,12 @@ export class CanvasController {
       object.setPathInfo();
       object.initDimensions();
     }
-    if (data.type !== "image") {
+    if (data.type === "image") {
+      // Clipped mark pieces (not the Logo plate) can be recolored via Fill.
+      if (patch.fill !== undefined && object instanceof FabricImage && !this.isUploadImage(object)) {
+        this.applyImagePieceFill(object, patch.fill);
+      }
+    } else {
       if (patch.fill !== undefined) this.applyFill(object, patch.fill);
       if (patch.stroke !== undefined) this.applyStroke(object, patch.stroke);
       if (patch.strokeWidth !== undefined) {
@@ -792,6 +817,7 @@ export class CanvasController {
     const debounced =
       patch.name !== undefined ||
       patch.text !== undefined ||
+      patch.fontSize !== undefined ||
       patch.opacity !== undefined ||
       patch.fill !== undefined ||
       patch.stroke !== undefined;
@@ -1026,7 +1052,27 @@ export class CanvasController {
   toggleVisible(id: string) {
     const object = this.findById(id);
     if (!object) return;
-    this.applyInteraction(object, object.visible === false, object.lockMovementX === true);
+    const showing = object.visible === false;
+    const data = this.data.get(object);
+    // Exact-upload mode: don't stack traced outlines on a full unpunched Logo (double print).
+    // Piece mode punches Logo holes — marks and live text are meant to sit on top.
+    // Live text is always allowed: words replace letter pixels, they do not double them.
+    if (
+      showing &&
+      data &&
+      data.type !== "text" &&
+      this.reconstruction?.keepShapes !== true &&
+      !(data.type === "image" && (data.name === "Original" || data.name === "Logo")) &&
+      this.stack().some((item) => this.isUploadImage(item) && item.visible !== false)
+    ) {
+      return;
+    }
+    this.applyInteraction(object, showing, object.lockMovementX === true);
+    // Only this layer — never mass-hide / mass-show the rest of the logo.
+    if (!showing) {
+      const selected = this.contentObjects().filter((item) => item !== object);
+      this.selectObjects(selected);
+    }
     this.commit();
   }
 
@@ -1100,10 +1146,13 @@ export class CanvasController {
     styleLogoObject(object);
     const step = (this.placed % 6) * 24;
     this.placed += 1;
-    object.set({
-      left: (this.artboard.width - object.getScaledWidth()) / 2 + step - 48,
-      top: (this.artboard.height - object.getScaledHeight()) / 2 + step - 48,
-    });
+    // positionByLeftTop works for both left/top and Fabric 7's default center origin.
+    object.positionByLeftTop(
+      new Point(
+        (this.artboard.width - object.getScaledWidth()) / 2 + step - 48,
+        (this.artboard.height - object.getScaledHeight()) / 2 + step - 48,
+      ),
+    );
     object.setCoords();
     this.applyInteraction(object, true, false);
     this.canvas.add(object);
@@ -1132,9 +1181,14 @@ export class CanvasController {
 
   private async finishOpen() {
     this.suppressRevision = true;
+    let collapsedToExact = false;
     try {
       if (this.initialDocument) {
-        await this.restore(JSON.stringify(sceneFromProject(this.initialDocument)), []);
+        const preferred = preferExactUpload(this.initialDocument);
+        collapsedToExact = preferred !== this.initialDocument;
+        this.initialDocument = preferred;
+        this.reconstruction = preferred.reconstruction ?? null;
+        await this.restore(JSON.stringify(sceneFromProject(preferred)), []);
         await this.waitForDocumentFonts();
       }
       this.history.reset(this.serialize());
@@ -1147,6 +1201,11 @@ export class CanvasController {
       this.emit();
     } finally {
       this.suppressRevision = false;
+    }
+    // Persist the exact logo so the next open never brings back broken traced layers.
+    if (collapsedToExact) {
+      this.revision += 1;
+      this.emit();
     }
   }
 
@@ -1229,6 +1288,81 @@ export class CanvasController {
     object.set("fill", value);
   }
 
+  /** Cache the natural clipped bitmap once so Fill can be changed repeatedly. */
+  private cacheImagePieceBase(object: FabricImage) {
+    if (this.imagePieceBases.has(object)) return;
+    const element = object.getElement();
+    const width = Math.max(1, Math.round(object.width || ("width" in element ? Number(element.width) : 1)));
+    const height = Math.max(1, Math.round(object.height || ("height" in element ? Number(element.height) : 1)));
+    const surface = document.createElement("canvas");
+    surface.width = width;
+    surface.height = height;
+    const context = surface.getContext("2d");
+    if (!context) return;
+    context.drawImage(element, 0, 0, width, height);
+    this.imagePieceBases.set(object, surface);
+  }
+
+  /** Average opaque pixel color from the untinted piece bitmap (for the Style swatch). */
+  private sampleImagePieceColor(object: FabricImage): string | null {
+    this.cacheImagePieceBase(object);
+    const base = this.imagePieceBases.get(object);
+    if (!base) return null;
+    const context = base.getContext("2d");
+    if (!context) return null;
+    const { data } = context.getImageData(0, 0, base.width, base.height);
+    let totalR = 0;
+    let totalG = 0;
+    let totalB = 0;
+    let weight = 0;
+    // Stride keeps this cheap on large slices; alpha-weighted so soft edges count less.
+    const stride = Math.max(1, Math.floor((base.width * base.height) / 4000)) * 4;
+    for (let index = 0; index < data.length; index += stride) {
+      const alpha = data[index + 3];
+      if (alpha < 32) continue;
+      const a = alpha / 255;
+      totalR += data[index] * a;
+      totalG += data[index + 1] * a;
+      totalB += data[index + 2] * a;
+      weight += a;
+    }
+    if (weight < 0.5) return null;
+    const toHex = (channel: number) =>
+      Math.round(channel / weight)
+        .toString(16)
+        .padStart(2, "0");
+    return `#${toHex(totalR)}${toHex(totalG)}${toHex(totalB)}`;
+  }
+
+  /** Solid recolor of a clipped upload piece — keeps alpha, replaces RGB. */
+  private applyImagePieceFill(object: FabricImage, fill: string | null) {
+    this.cacheImagePieceBase(object);
+    const base = this.imagePieceBases.get(object);
+    if (!base) return;
+    const surface = document.createElement("canvas");
+    surface.width = base.width;
+    surface.height = base.height;
+    const context = surface.getContext("2d");
+    if (!context) return;
+    context.drawImage(base, 0, 0);
+    const color = fill ? hexToRgb(fill) : null;
+    if (color) {
+      const imageData = context.getImageData(0, 0, surface.width, surface.height);
+      const pixels = imageData.data;
+      for (let index = 0; index < pixels.length; index += 4) {
+        if (pixels[index + 3] === 0) continue;
+        pixels[index] = color.r;
+        pixels[index + 1] = color.g;
+        pixels[index + 2] = color.b;
+      }
+      context.putImageData(imageData, 0, 0);
+    }
+    object.setElement(surface);
+    // Empty string — not Fabric's rgb(0,0,0) default — so serialize does not fake a tint.
+    object.set({ fill: fill ?? "" });
+    object.setCoords();
+  }
+
   private applyStroke(object: FabricObject, stroke: string | null) {
     const targets = this.leaves(object);
     const objects = targets.length > 0 ? targets : [object];
@@ -1274,17 +1408,24 @@ export class CanvasController {
       },
       selection: selected.length === 1 ? this.snapshotOf(selected[0]) : null,
       selectionCount: selected.length,
-      layers: [...this.stack()].reverse().map((object) => {
-        const data = this.data.get(object);
-        return {
-          id: data?.id ?? "",
-          name: data?.name ?? "Object",
-          type: data?.type ?? "rect",
-          visible: object.visible !== false,
-          locked: object.lockMovementX === true,
-          selected: selectedIds.has(data?.id ?? ""),
-        };
-      }),
+      layers: [...this.stack()]
+        .reverse()
+        .filter((object) => {
+          const data = this.data.get(object);
+          // Hidden reference "Original" stays out of Layers; "Logo" is the editable upload.
+          return !(data?.type === "image" && data.name === "Original");
+        })
+        .map((object) => {
+          const data = this.data.get(object);
+          return {
+            id: data?.id ?? "",
+            name: data?.name ?? "Object",
+            type: data?.type ?? "rect",
+            visible: object.visible !== false,
+            locked: object.lockMovementX === true,
+            selected: selectedIds.has(data?.id ?? ""),
+          };
+        }),
       canUndo: this.history.canUndo,
       canRedo: this.history.canRedo,
       snap: this.snapEnabled,
@@ -1292,6 +1433,8 @@ export class CanvasController {
       offsetDistance: this.offsetDistance,
       revision: this.revision,
       error: this.error,
+      keepShapes: this.reconstruction?.keepShapes === true,
+      keepEdgeOutlines: this.reconstruction?.keepEdgeOutlines !== false,
     };
   }
 
@@ -1299,18 +1442,26 @@ export class CanvasController {
     const data = this.data.get(object);
     const fillSource = this.leaves(object)[0] ?? object;
     const weight = object instanceof IText ? object.fontWeight : undefined;
+    const topLeft = object.getPositionByOrigin("left", "top");
+    const isPiece = data?.type === "image" && object instanceof FabricImage && !this.isUploadImage(object);
     return {
       id: data?.id ?? "",
       type: data?.type ?? "rect",
       name: data?.name ?? "Object",
-      x: Math.round(object.left ?? 0),
-      y: Math.round(object.top ?? 0),
+      x: Math.round(topLeft.x),
+      y: Math.round(topLeft.y),
       width: Math.max(1, Math.round(object.getScaledWidth())),
       height: Math.max(1, Math.round(object.getScaledHeight())),
       angle: Math.round(object.angle ?? 0),
       opacity: object.opacity ?? 1,
       locked: object.lockMovementX === true,
-      fill: data?.type === "line" ? null : hexColor(fillSource.fill),
+      fill:
+        data?.type === "line"
+          ? null
+          : data?.type === "image"
+            ? hexColor(object.fill)
+            : hexColor(fillSource.fill),
+      sourceColor: isPiece ? this.sampleImagePieceColor(object) : undefined,
       stroke: hexColor(fillSource.stroke),
       strokeWidth: Math.round(fillSource.strokeWidth ?? 0),
       cornerRadius: object instanceof Rect ? Math.round(object.rx ?? 0) : undefined,
@@ -1400,6 +1551,10 @@ export class CanvasController {
         ...(data?.fontId ? { fontId: data.fontId } : {}),
         ...(data?.assetId ? { assetId: data.assetId } : {}),
         ...(data?.confidence !== undefined ? { confidence: data.confidence } : {}),
+        ...(data?.clipPath ? { clipPath: data.clipPath } : {}),
+        ...(data?.clipRule ? { clipRule: data.clipRule } : {}),
+        ...(data?.clipInvert ? { clipInvert: true } : {}),
+        ...(data?.clipSubtract ? { clipSubtract: data.clipSubtract } : {}),
       },
       visible: object.visible !== false,
       locked: object.lockMovementX === true,
@@ -1409,7 +1564,12 @@ export class CanvasController {
       scaleY: round(object.scaleY ?? 1),
       angle: round(object.angle ?? 0),
       opacity: round(object.opacity ?? 1),
-      fill: data?.type === "line" ? null : hexColor(fillSource.fill),
+      fill:
+        data?.type === "line"
+          ? null
+          : data?.type === "image"
+            ? hexColor(object.fill)
+            : hexColor(fillSource.fill),
       stroke: hexColor(fillSource.stroke),
       strokeWidth: round(fillSource.strokeWidth ?? 0),
       flipX: object.flipX === true,
@@ -1452,6 +1612,14 @@ export class CanvasController {
     if (data?.type === "image") {
       record.width = round(object.width ?? 1);
       record.height = round(object.height ?? 1);
+      // Persist top-left even if a FabricImage still carries center origin.
+      const topLeft = object.getPositionByOrigin("left", "top");
+      record.left = round(topLeft.x);
+      record.top = round(topLeft.y);
+      if (data.clipPath) {
+        record.path = data.clipPath;
+        record.fillRule = data.clipRule === "evenodd" ? "evenodd" : "nonzero";
+      }
     }
     if (object instanceof Line) {
       record.x1 = round(object.x1);
@@ -1498,6 +1666,7 @@ export class CanvasController {
         this.counts.set(label, (this.counts.get(label) ?? 0) + 1);
       }
       this.canvas.sendObjectToBack(this.artboard);
+      this.normalizeReconstructionVisibility();
       const selected = created.filter((object) => selection.includes(this.data.get(object)?.id ?? ""));
       this.selectObjects(selected);
     } finally {
@@ -1574,9 +1743,70 @@ export class CanvasController {
         strokeUniform: true,
       });
     } else if (data.type === "image") {
-      const loaded = data.assetId ? await this.loadUploadedImage(data.assetId) : null;
+      const clip = record.path ?? data.clipPath;
+      const clipRule = record.fillRule ?? data.clipRule ?? "nonzero";
+      const clipInvert = data.clipInvert === true;
+      // Place uses the scene left/top (keeps user moves). Crop always follows the path in upload space.
+      const placeX = record.left ?? 0;
+      const placeY = record.top ?? 0;
+      let pieceWidth = Math.max(1, record.width && record.width > 0 ? record.width : 200);
+      let pieceHeight = Math.max(1, record.height && record.height > 0 ? record.height : 200);
+      let cropX = placeX;
+      let cropY = placeY;
+      if (clip && data.name !== "Logo") {
+        const box = pathBounds(clip);
+        if (box) {
+          cropX = box.x;
+          cropY = box.y;
+          pieceWidth = Math.max(1, box.width);
+          pieceHeight = Math.max(1, box.height);
+          record.width = pieceWidth;
+          record.height = pieceHeight;
+        }
+      }
+      record.left = placeX;
+      record.top = placeY;
+      const fullWidth = Math.max(pieceWidth, this.artboard.width || pieceWidth);
+      const fullHeight = Math.max(pieceHeight, this.artboard.height || pieceHeight);
+      const clipSubtract = data.clipSubtract;
+      // Keep: transparent holes (clean move, rings may show). Remove: punch + fill holes with the
+      // artboard color so moving a pink circle leaves no dark void and no pink ghost.
+      // Expand every hole (not only round ones) so letter bands under live text leave no outline ghosts.
+      const hidePunches =
+        data.name === "Logo" && this.reconstruction?.keepEdgeOutlines === false;
+      const loaded =
+        data.assetId && clip
+          ? await this.loadClippedUpload({
+              assetId: data.assetId,
+              pathD: clip,
+              fillRule: clipRule === "evenodd" ? "evenodd" : "nonzero",
+              fullWidth,
+              fullHeight,
+              pieceX: cropX,
+              pieceY: cropY,
+              pieceWidth,
+              pieceHeight,
+              invert: clipInvert,
+              subtractPath: clipSubtract,
+              expandSubtractPx: hidePunches ? 22 : 0,
+              expandOnlyRoundHoles: false,
+              fillSubtractWith: hidePunches ? this.background || "#111122" : undefined,
+              expandClipPx: 0,
+            })
+          : data.assetId
+            ? await this.loadUploadedImage(data.assetId)
+            : null;
       if (loaded) {
         object = loaded;
+        // Transparent pixels must not steal clicks from pieces underneath.
+        // Clear Fabric Image's default rgb(0,0,0) fill so it is not saved as a fake recolor.
+        object.set({ perPixelTargetFind: true, fill: "" });
+        if (clip) {
+          data.clipPath = clip;
+          data.clipRule = clipRule === "evenodd" ? "evenodd" : "nonzero";
+          if (clipInvert) data.clipInvert = true;
+          if (clipSubtract) data.clipSubtract = clipSubtract;
+        }
       } else {
         object = createRectObject({ id: data.id, name: data.name }).object;
         object.set({
@@ -1610,6 +1840,24 @@ export class CanvasController {
       flipX: record.flipX === true,
       flipY: record.flipY === true,
     });
+    if (data.type === "image" && object.width && object.height) {
+      // Project stores natural size + scale as top-left scene coords. FabricImage defaults to
+      // center/center, so left/top 0 parks the midpoint on the artboard corner (half-offset).
+      const naturalWidth = object.width || 1;
+      const naturalHeight = object.height || 1;
+      const targetWidth = Math.max(1, (record.width && record.width > 0 ? record.width : naturalWidth) * record.scaleX);
+      const targetHeight = Math.max(1, (record.height && record.height > 0 ? record.height : naturalHeight) * record.scaleY);
+      object.set({
+        originX: "left",
+        originY: "top",
+        scaleX: targetWidth / naturalWidth,
+        scaleY: targetHeight / naturalHeight,
+      });
+      // Must run after scale — uses transformed size to pin the bitmap's top-left to the artboard.
+      object.positionByLeftTop(
+        new Point((this.artboard.left ?? 0) + (record.left ?? 0), (this.artboard.top ?? 0) + (record.top ?? 0)),
+      );
+    }
     if (data.type === "icon" && object.width && object.height) {
       const width = record.width && record.width > 0 ? record.width : object.width;
       const height = record.height && record.height > 0 ? record.height : object.height;
@@ -1620,7 +1868,12 @@ export class CanvasController {
     }
     this.data.set(object, { ...data });
     styleLogoObject(object);
-    if (data.type !== "line" && data.type !== "image") this.applyFill(object, record.fill);
+    if (data.type === "image" && object instanceof FabricImage && !this.isUploadImage(object)) {
+      this.cacheImagePieceBase(object);
+      if (record.fill) this.applyImagePieceFill(object, record.fill);
+    } else if (data.type !== "line" && data.type !== "image") {
+      this.applyFill(object, record.fill);
+    }
     if (data.type !== "image") {
       this.applyStroke(object, record.stroke);
       this.applyStrokeWidth(object, record.strokeWidth);
@@ -1710,7 +1963,9 @@ export class CanvasController {
   private applyInteraction(object: FabricObject, visible: boolean, locked: boolean) {
     object.set({
       visible,
-      evented: visible,
+      // Locked layers (like Original) can stay visible for reference without blocking the pen.
+      evented: visible && !locked,
+      selectable: visible && !locked,
       lockMovementX: locked,
       lockMovementY: locked,
       lockScalingX: locked,
@@ -1719,6 +1974,27 @@ export class CanvasController {
       hasControls: visible && !locked,
     });
     if (object instanceof IText) object.editable = visible && !locked;
+  }
+
+  private isUploadImage(object: FabricObject) {
+    const data = this.data.get(object);
+    return data?.type === "image" && (data.name === "Original" || data.name === "Logo");
+  }
+
+  private normalizeReconstructionVisibility() {
+    // Exact upload is preferred in preferExactUpload() on open. If an old session still has
+    // traced shapes beside the bitmap, hide the traces so the eye cannot stack a second mark.
+    // keepShapes / clipped pieces must stay visible and selectable — never mass-hide them.
+    if (!this.reconstruction || this.reconstruction.keepShapes) return;
+    const upload = this.stack().find((object) => this.isUploadImage(object));
+    if (!upload) return;
+    this.applyInteraction(upload, true, false);
+    const data = this.data.get(upload);
+    if (data) this.data.set(upload, { ...data, name: "Logo" });
+    for (const object of this.stack()) {
+      if (object === upload) continue;
+      if (object.visible !== false) this.applyInteraction(object, false, object.lockMovementX === true);
+    }
   }
 
   private nudge(dx: number, dy: number) {
@@ -1744,14 +2020,173 @@ export class CanvasController {
 
   private async loadUploadedImage(assetId: string) {
     try {
+      const { getGuestAssetUrl } = await import("@/features/editor/guest-assets");
+      const guestUrl = getGuestAssetUrl(assetId);
+      if (guestUrl) {
+        // Guest registry owns this URL — do not revoke it when the canvas remounts.
+        return await FabricImage.fromURL(guestUrl, {}, { originX: "left", originY: "top" });
+      }
       const response = await fetch(`/api/uploads/${assetId}`, { credentials: "same-origin" });
       if (!response.ok) return null;
       const url = URL.createObjectURL(await response.blob());
       this.imageUrls.add(url);
-      return await FabricImage.fromURL(url);
+      return await FabricImage.fromURL(url, {}, { originX: "left", originY: "top" });
     } catch {
       return null;
     }
+  }
+
+  /** Exact upload pixels, cropped to one traced region; child paths are punched out to prevent ghosts. */
+  private async loadClippedUpload(input: {
+    assetId: string;
+    pathD: string;
+    fillRule: "evenodd" | "nonzero";
+    fullWidth: number;
+    fullHeight: number;
+    pieceX: number;
+    pieceY: number;
+    pieceWidth: number;
+    pieceHeight: number;
+    invert?: boolean;
+    subtractPath?: string;
+    /** Grow destination-out holes by this many px (Logo plate). */
+    expandSubtractPx?: number;
+    /** When set with expandSubtractPx, only stroke round-ish hole subpaths (not letters). */
+    expandOnlyRoundHoles?: boolean;
+    /** After punching, paint this color into the holes (hides dark voids on opaque artboards). */
+    fillSubtractWith?: string;
+    /** Grow destination-in clip by this many px so rings stay on the movable slice. */
+    expandClipPx?: number;
+  }) {
+    try {
+      const { getGuestAsset } = await import("@/features/editor/guest-assets");
+      const guest = getGuestAsset(input.assetId);
+      const blob = guest
+        ? guest.blob
+        : await (async () => {
+            const response = await fetch(`/api/uploads/${input.assetId}`, { credentials: "same-origin" });
+            if (!response.ok) return null;
+            return response.blob();
+          })();
+      if (!blob) return null;
+      const bitmap = await createImageBitmap(blob);
+      const fullWidth = Math.max(1, Math.round(input.fullWidth));
+      const fullHeight = Math.max(1, Math.round(input.fullHeight));
+      const pieceWidth = Math.max(1, Math.round(input.pieceWidth));
+      const pieceHeight = Math.max(1, Math.round(input.pieceHeight));
+      const surface = document.createElement("canvas");
+      surface.width = pieceWidth;
+      surface.height = pieceHeight;
+      const context = surface.getContext("2d");
+      if (!context) {
+        bitmap.close();
+        return null;
+      }
+      // Path coords are artboard-absolute; shift so this piece's top-left is (0,0) on the crop.
+      context.translate(-input.pieceX, -input.pieceY);
+      // Draw the upload as it fills the artboard — same space the tracer paths were built in.
+      context.drawImage(bitmap, 0, 0, fullWidth, fullHeight);
+      bitmap.close();
+      const rule = input.fillRule === "evenodd" ? "evenodd" : "nonzero";
+      context.fillStyle = "#000";
+      // Full-board Logo passes a rect path only to enable subtract; skip destination-in when the
+      // path already covers the whole piece (avoids an extra AA pass that frays edges).
+      const coversPiece = pathCoversPiece(input.pathD, input.pieceX, input.pieceY, pieceWidth, pieceHeight);
+      if (!coversPiece) {
+        context.globalCompositeOperation = input.invert ? "destination-out" : "destination-in";
+        const clipPath = new Path2D(input.pathD);
+        context.fill(clipPath, rule);
+        const expandClip = input.expandClipPx ?? 0;
+        if (expandClip > 0 && !input.invert) {
+          context.lineWidth = expandClip * 2;
+          context.lineJoin = "round";
+          context.lineCap = "round";
+          context.strokeStyle = "#000";
+          context.stroke(clipPath);
+        }
+      } else if (input.invert) {
+        context.globalCompositeOperation = "destination-out";
+        context.fill(new Path2D(input.pathD), rule);
+      }
+      // Punch child regions out of parents so moving a circle/letter leaves a hole, not a copy.
+      if (input.subtractPath && !input.invert) {
+        context.globalCompositeOperation = "destination-out";
+        const hole = new Path2D(input.subtractPath);
+        context.fill(hole, "nonzero");
+        const expand = input.expandSubtractPx ?? 0;
+        if (expand > 0) {
+          context.lineWidth = expand * 2;
+          context.lineJoin = "round";
+          context.lineCap = "round";
+          context.strokeStyle = "#000";
+          if (input.expandOnlyRoundHoles) {
+            for (const sub of splitSubpaths(input.subtractPath)) {
+              const box = pathBounds(sub);
+              if (!box || !isRoundClipPath(sub, box.width, box.height)) continue;
+              context.stroke(new Path2D(sub));
+            }
+          } else {
+            context.stroke(hole);
+          }
+        }
+        // Paint plate-matching color into holes so Remove does not leave visible dark punches.
+        if (input.fillSubtractWith) {
+          // Prefer the Logo's own dark pixels over the artboard hex — they often differ slightly.
+          let fill = input.fillSubtractWith;
+          const sx = Math.min(8, Math.max(0, pieceWidth - 1));
+          const sy = Math.min(8, Math.max(0, pieceHeight - 1));
+          // Sample before destination-over; corners of the full Logo plate are usually the bg.
+          const sample = context.getImageData(sx, sy, 1, 1).data;
+          if (sample[3] > 200) fill = `rgb(${sample[0]},${sample[1]},${sample[2]})`;
+          context.globalCompositeOperation = "destination-over";
+          context.fillStyle = fill;
+          context.fill(hole, "nonzero");
+          if (expand > 0) {
+            context.lineWidth = expand * 2;
+            context.lineJoin = "round";
+            context.lineCap = "round";
+            context.strokeStyle = fill;
+            if (input.expandOnlyRoundHoles) {
+              for (const sub of splitSubpaths(input.subtractPath)) {
+                const box = pathBounds(sub);
+                if (!box || !isRoundClipPath(sub, box.width, box.height)) continue;
+                context.stroke(new Path2D(sub));
+              }
+            } else {
+              context.stroke(hole);
+            }
+          }
+        }
+      }
+      const url = surface.toDataURL("image/png");
+      return await FabricImage.fromURL(url, {}, { originX: "left", originY: "top" });
+    } catch {
+      return null;
+    }
+  }
+
+  /** Keep: transparent holes (clean move). Remove: punch + fill with artboard color (no dark voids). */
+  async setKeepEdgeOutlines(keep: boolean) {
+    if (!this.reconstruction?.keepShapes) return;
+    if ((this.reconstruction.keepEdgeOutlines !== false) === keep) return;
+    this.reconstruction = { ...this.reconstruction, keepEdgeOutlines: keep };
+    const selection = this.selectionIds();
+    this.suppressRevision = true;
+    try {
+      const scene = JSON.parse(this.serialize()) as SceneDocument;
+      const logo = scene.objects.find((object) => object.data.name === "Logo" && object.data.type === "image");
+      if (logo && !logo.data.clipSubtract) {
+        const holes = scene.objects
+          .filter((object) => object.data.name !== "Logo" && object.path)
+          .map((object) => object.path!)
+          .join(" ");
+        if (holes) logo.data.clipSubtract = holes;
+      }
+      await this.restore(JSON.stringify(scene), selection);
+    } finally {
+      this.suppressRevision = false;
+    }
+    this.commit();
   }
 
   private fail(message: string) {
@@ -2224,4 +2659,44 @@ function nearest(points: number[], targets: number[], threshold: number) {
     }
   }
   return best;
+}
+
+/** Split an SVG path into subpaths starting at each M/m command. */
+function splitSubpaths(pathD: string) {
+  return pathD.split(/(?=M)/i).map((part) => part.trim()).filter(Boolean);
+}
+
+/** Heuristic: large circle mark pieces (diamond dots), not letter counters. */
+function isRoundClipPath(pathD: string, width: number, height: number) {
+  const min = Math.min(width, height);
+  const max = Math.max(width, height);
+  // Diamond dots are ~100–140px; letter bowls are smaller.
+  if (min < 95 || max > 180) return false;
+  if (max / Math.max(1, min) > 1.3) return false;
+  return /[CcQqAaSs]/.test(pathD);
+}
+
+/** True when pathD is an axis-aligned rect covering the piece crop (Logo plate). */
+function pathCoversPiece(pathD: string, pieceX: number, pieceY: number, pieceWidth: number, pieceHeight: number) {
+  const match = pathD.match(
+    /^\s*M\s+([-\d.]+)\s+([-\d.]+)\s+H\s+([-\d.]+)\s+V\s+([-\d.]+)\s+H\s+([-\d.]+)\s+Z\s*$/i,
+  );
+  if (!match) return false;
+  const x1 = Number(match[1]);
+  const y1 = Number(match[2]);
+  const x2 = Number(match[3]);
+  const y2 = Number(match[4]);
+  const x3 = Number(match[5]);
+  if (![x1, y1, x2, y2, x3].every(Number.isFinite)) return false;
+  if (Math.abs(x3 - x1) > 0.5) return false;
+  const left = Math.min(x1, x2);
+  const right = Math.max(x1, x2);
+  const top = Math.min(y1, y2);
+  const bottom = Math.max(y1, y2);
+  return (
+    left <= pieceX + 0.5 &&
+    top <= pieceY + 0.5 &&
+    right >= pieceX + pieceWidth - 0.5 &&
+    bottom >= pieceY + pieceHeight - 0.5
+  );
 }

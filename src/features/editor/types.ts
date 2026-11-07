@@ -19,6 +19,13 @@ export type LogoObjectData = {
   fontId?: string;
   assetId?: string;
   confidence?: number;
+  /** SVG path used to clip an upload image into an editable piece. */
+  clipPath?: string;
+  clipRule?: "evenodd" | "nonzero";
+  /** Cut the clip path out instead of keeping only that region. */
+  clipInvert?: boolean;
+  /** Child piece paths punched out of this slice so moving them leaves no ghost. */
+  clipSubtract?: string;
 };
 
 export type EditorFontOption = {
@@ -48,6 +55,8 @@ export type SelectionSnapshot = {
   angle: number;
   opacity: number;
   fill: string | null;
+  /** Sampled opaque color from a clipped image piece (for the Color swatch when untinted). */
+  sourceColor?: string | null;
   stroke: string | null;
   strokeWidth: number;
   cornerRadius?: number;
@@ -102,4 +111,8 @@ export type EditorSnapshot = {
   offsetDistance: number;
   revision: number;
   error: string | null;
+  /** Edit elements doc: true when traced pieces stay on the artboard. */
+  keepShapes: boolean;
+  /** Edit elements doc: keep faint rings around punched holes (default true). false expands the punch. */
+  keepEdgeOutlines: boolean;
 };

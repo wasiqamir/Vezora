@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
+import { PageFallback } from "@/components/page-fallback";
 import { EditorShell } from "@/features/editor/editor-shell";
 import { getEditorFontSetup } from "@/features/editor/font-setup";
 import { auth } from "@/lib/auth";
@@ -8,19 +9,30 @@ import { startProject } from "@/features/account/actions";
 import { getOwnedProject } from "@/features/projects/store";
 import { Button } from "@/components/ui/button";
 
-export default function EditorPage({ params }: PageProps<"/editor/[projectId]">) {
+export default function EditorPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ export?: string }>;
+}) {
   return (
-    <Suspense
-      fallback={<p className="px-4 py-10 text-sm text-muted-foreground">Opening the editor…</p>}
-    >
-      <EditorContent params={params} />
+    <Suspense fallback={<PageFallback tone="dark" full />}>
+      <EditorContent params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function EditorContent({ params }: { params: Promise<{ projectId: string }> }) {
+async function EditorContent({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ export?: string }>;
+}) {
   await connection();
   const { projectId } = await params;
+  const query = await searchParams;
   const session = await auth();
   if (!session?.user?.id) redirect("/sign-in");
   if (projectId === "new") {
@@ -43,13 +55,14 @@ async function EditorContent({ params }: { params: Promise<{ projectId: string }
   const fonts = getEditorFontSetup();
 
   return (
-    <main className={`${fonts.className} fixed inset-0 flex min-h-0 flex-col overflow-hidden bg-[#f4f2ec]`}>
+    <main className={`${fonts.className} fixed inset-0 flex min-h-0 flex-col overflow-hidden bg-[#07041c]`}>
       <div className="flex min-h-0 w-full flex-1">
         <EditorShell
           projectId={project.id}
           projectName={project.name}
           document={project.document}
           fonts={fonts.options}
+          openExport={query.export === "1"}
         />
       </div>
     </main>
