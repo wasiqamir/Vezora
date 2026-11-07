@@ -2150,12 +2150,22 @@ export class CanvasController {
           context.strokeStyle = "#000";
           for (const sub of expandSubs) context.stroke(new Path2D(sub));
         }
-        // Paint plate color under EVERY transparent pixel (holes + AA fringe). Path-only fill
-        // left soft black star/letter punches; a full-piece destination-over wipe clears them.
+        // Force every transparent / AA fringe pixel to opaque plate color so Remove leaves
+        // no black star or letter punches (destination-over alone still left soft ghosts).
         if (plateFill) {
-          context.globalCompositeOperation = "destination-over";
-          context.fillStyle = plateFill;
-          context.fillRect(input.pieceX, input.pieceY, pieceWidth, pieceHeight);
+          const [pr, pg, pb] = parseCssRgb(plateFill);
+          const imageData = context.getImageData(0, 0, pieceWidth, pieceHeight);
+          const pixels = imageData.data;
+          for (let i = 0; i < pixels.length; i += 4) {
+            const alpha = pixels[i + 3] ?? 0;
+            if (alpha >= 252) continue;
+            const a = alpha / 255;
+            pixels[i] = Math.round((pixels[i] ?? 0) * a + pr * (1 - a));
+            pixels[i + 1] = Math.round((pixels[i + 1] ?? 0) * a + pg * (1 - a));
+            pixels[i + 2] = Math.round((pixels[i + 2] ?? 0) * a + pb * (1 - a));
+            pixels[i + 3] = 255;
+          }
+          context.putImageData(imageData, 0, 0);
         }
       }
       const url = surface.toDataURL("image/png");
@@ -2175,6 +2185,7 @@ export class CanvasController {
     try {
       const scene = JSON.parse(this.serialize()) as SceneDocument;
       const logo = scene.objects.find((object) => object.data.name === "Logo" && object.data.type === "image");
+      // Only seed punches when missing — do not replace asExactEditablePieces word-band rects.
       if (logo && !logo.data.clipSubtract) {
         const holes = scene.objects
           .filter((object) => object.data.name !== "Logo" && object.path)
@@ -2671,6 +2682,21 @@ function isAxisAlignedRectPath(pathD: string) {
   return /^\s*M\s+[-\d.]+\s+[-\d.]+\s+H\s+[-\d.]+\s+V\s+[-\d.]+\s+H\s+[-\d.]+\s+Z\s*$/i.test(
     pathD.trim(),
   );
+}
+
+function parseCssRgb(color: string): [number, number, number] {
+  const rgb = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (rgb) return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+  const hex = color.trim().match(/^#([0-9a-f]{6})$/i);
+  if (hex) {
+    const value = hex[1]!;
+    return [
+      Number.parseInt(value.slice(0, 2), 16),
+      Number.parseInt(value.slice(2, 4), 16),
+      Number.parseInt(value.slice(4, 6), 16),
+    ];
+  }
+  return [17, 17, 34];
 }
 
 /** True when pathD is an axis-aligned rect covering the piece crop (Logo plate). */

@@ -22,7 +22,7 @@ import { createObjectId } from "@/features/editor/objects";
 import { getGuestAsset, registerGuestAsset, uploadSrc } from "@/features/editor/guest-assets";
 import { templatePreviewSvg } from "@/features/templates/preview";
 
-const GUEST_DRAFT_TIMEOUT_MS = 12_000;
+const GUEST_DRAFT_TIMEOUT_MS = 20_000;
 
 type View = "original" | "overlay" | "draft" | "side";
 
@@ -215,16 +215,7 @@ export function ReconstructDialog({
       if (guest) {
         const local = getGuestAsset(assetId);
         if (!local) throw new Error("That image could not be found in this session.");
-        // Edit elements: skip serverless OCR/trace — open the exact upload on the artboard now.
-        if (intent === "elements") {
-          if (isStale?.()) return;
-          const exact = buildGuestExactDocument(local.id, local.width, local.height);
-          setDraft(exact);
-          setFailed(false);
-          setMergeIds([]);
-          await commitDocument(exact, "shapes");
-          return;
-        }
+        // Always slice via guest draft so Edit elements gets movable marks + live words.
         await createGuestDraftFromFile(
           new File([local.blob], local.name, { type: local.mimeType }),
           { width: local.width, height: local.height },

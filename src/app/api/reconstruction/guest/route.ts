@@ -51,14 +51,13 @@ export async function POST(request: Request) {
 
     const assetId = `guest_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
     const jobId = `guest_${assetId}`.slice(0, 80);
-    // Guest must return quickly: skip OCR (Tesseract cold-start dominates) and trace a smaller raster.
-    // Exact upload stays on the artboard; shapes still unlock from the vector pass.
+    // Fast trace + short OCR so Edit elements opens editable marks and live words without hanging.
     const draft = await buildReconstructionDraft({
       bytes,
       mimeType: file.type || "image/png",
       assetId,
       jobId,
-      ocrTimeoutMs: 0,
+      ocrTimeoutMs: 4_000,
       maxEdge: 960,
       fastOcr: true,
     });
