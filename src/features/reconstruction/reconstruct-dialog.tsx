@@ -13,11 +13,14 @@ import {
 } from "@/features/reconstruction/actions";
 import {
   asExactEditablePieces,
+  attachLiveText,
   mergePaths,
   preferEditableElements,
+  textLikeBands,
   useEditableText,
   useVectorOutlines,
 } from "@/features/reconstruction/correct";
+import { recognizeLogoText } from "@/features/reconstruction/ocr-browser";
 import { createObjectId } from "@/features/editor/objects";
 import { getGuestAsset, registerGuestAsset, uploadSrc } from "@/features/editor/guest-assets";
 import { templatePreviewSvg } from "@/features/templates/preview";
@@ -110,6 +113,34 @@ export function ReconstructDialog({
   /** Bumps on each auto-start so Strict Mode / double mounts cannot commit a stale job over a good save. */
   const runGeneration = useRef(0);
 
+  /**
+   * Server drafts skip OCR (Tesseract crashes on Vercel). Read words in the browser so
+   * BLOOM / ATELIER become live text (font, size, color) instead of image slices.
+   */
+  async function prepareEditableDraft(
+    document: ProjectDocument,
+    image: Blob,
+    natural: { width: number; height: number },
+  ) {
+    let next = document;
+    try {
+      const bandsArtboard = textLikeBands(document);
+      const scaleX = natural.width / Math.max(1, document.artboard.width);
+      const scaleY = natural.height / Math.max(1, document.artboard.height);
+      const bands = bandsArtboard.map((band) => ({
+        x: band.x * scaleX,
+        y: band.y * scaleY,
+        width: band.width * scaleX,
+        height: band.height * scaleY,
+      }));
+      const hits = await recognizeLogoText(image, { bands });
+      next = attachLiveText(document, hits, natural.width, natural.height, bandsArtboard);
+    } catch {
+      // Shapes still open; words may stay as path slices if OCR fails.
+    }
+    return preferEditableElements(next);
+  }
+
   async function choose(next: File | null) {
     setError(null);
     setDraft(null);
@@ -173,7 +204,11 @@ export function ReconstructDialog({
         height: payload.asset.height,
         name: source.name,
       });
-      const prepared = preferEditableElements(payload.document);
+      const prepared = await prepareEditableDraft(payload.document, source, {
+        width: payload.asset.width,
+        height: payload.asset.height,
+      });
+      if (isStale?.()) return;
       setDraft(prepared);
       setFailed(Boolean(payload.recovered));
       setMergeIds([]);
@@ -268,7 +303,26 @@ export function ReconstructDialog({
       }>(projectResponse);
       if (isStale?.()) return;
       if (project?.project?.document) {
-        const prepared = preferEditableElements(project.project.document);
+        const sourceDoc = project.project.document;
+        const original = sourceDoc.objects.find(
+          (object) => object.name === "Original" && object.type === "image" && object.assetId,
+        );
+        let prepared = preferEditableElements(sourceDoc);
+        if (original?.assetId) {
+          try {
+            const upload = await fetch(`/api/uploads/${original.assetId}`, { credentials: "same-origin" });
+            if (upload.ok) {
+              const blob = await upload.blob();
+              const bitmap = await createImageBitmap(blob);
+              const natural = { width: bitmap.width, height: bitmap.height };
+              bitmap.close();
+              prepared = await prepareEditableDraft(sourceDoc, blob, natural);
+            }
+          } catch {
+            // Keep shape-only draft if browser OCR fails.
+          }
+        }
+        if (isStale?.()) return;
         const hasOriginal = prepared.objects.some((object) => object.name === "Original");
         if (outcome === "succeeded" || hasOriginal) {
           setDraft(prepared);
@@ -531,7 +585,7 @@ export function ReconstructDialog({
                   aria-hidden="true"
                   className="size-2.5 animate-pulse rounded-full bg-gradient-to-r from-[#67e8f9] to-[#d8b4fe]"
                 />
-                <p className="text-sm font-medium text-white">Reading the image…</p>
+                <p className="text-sm font-medium text-white">Reading shapes and text…</p>
               </div>
               <p className="max-w-md text-sm leading-relaxed text-white/60">
                 Building editable parts that match your exact upload.

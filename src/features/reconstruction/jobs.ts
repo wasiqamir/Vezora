@@ -146,9 +146,9 @@ export async function runReconstructionJob(jobId: string) {
       mimeType: job.sourceAsset.mimeType,
       assetId: job.sourceAssetId,
       jobId: job.id,
-      // Skip OCR on serverless — Tesseract often crashes; shapes still unlock from trace.
+      // Skip OCR on Vercel (Tesseract crashes); local/dev can read words. Client OCR fills the gap.
       maxEdge: 1280,
-      ocrTimeoutMs: 0,
+      ocrTimeoutMs: process.env.VERCEL ? 0 : 20_000,
       fastOcr: true,
     });
     if (!(await stillRunning(job.id))) return;

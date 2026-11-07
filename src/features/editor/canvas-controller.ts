@@ -1769,9 +1769,13 @@ export class CanvasController {
       const fullHeight = Math.max(pieceHeight, this.artboard.height || pieceHeight);
       const clipSubtract = data.clipSubtract;
       // Keep: transparent holes (rings may show). Remove: punch + fill with plate color so
-      // moving a pink circle leaves no leftover copy and no dark void.
+      // moving a star/mark leaves nothing behind on the Logo plate.
       const hidePunches =
         data.name === "Logo" && this.reconstruction?.keepEdgeOutlines === false;
+      // Remove: grow each mark hole into a padded rect so tight/mismatched tracer paths
+      // cannot leave a peach copy under the movable piece.
+      const subtractPath =
+        hidePunches && clipSubtract ? fortifyRemoveHoles(clipSubtract) : clipSubtract;
       const loaded =
         data.assetId && clip
           ? await this.loadClippedUpload({
@@ -1785,9 +1789,9 @@ export class CanvasController {
               pieceWidth,
               pieceHeight,
               invert: clipInvert,
-              subtractPath: clipSubtract,
-              expandSubtractPx: hidePunches ? 3 : 0,
-              expandExcludeRectHoles: false,
+              subtractPath,
+              expandSubtractPx: hidePunches ? 14 : 0,
+              expandExcludeRectHoles: hidePunches,
               fillSubtractWith: hidePunches ? this.background || "#111122" : undefined,
               expandClipPx: 0,
             })
@@ -2174,20 +2178,28 @@ export class CanvasController {
   /** Keep: transparent holes (clean move). Remove: punch + fill with artboard color (no dark voids). */
   async setKeepEdgeOutlines(keep: boolean) {
     if (!this.reconstruction?.keepShapes) return;
-    if ((this.reconstruction.keepEdgeOutlines !== false) === keep) return;
+    // Re-clicking Remove still rebuilds punches (covers stars that were missing from clipSubtract).
+    const already = (this.reconstruction.keepEdgeOutlines !== false) === keep;
+    if (already && keep) return;
     this.reconstruction = { ...this.reconstruction, keepEdgeOutlines: keep };
     const selection = this.selectionIds();
     this.suppressRevision = true;
     try {
       const scene = JSON.parse(this.serialize()) as SceneDocument;
       const logo = scene.objects.find((object) => object.data.name === "Logo" && object.data.type === "image");
-      // Only seed punches when missing — do not replace asExactEditablePieces word-band rects.
-      if (logo && !logo.data.clipSubtract) {
-        const holes = scene.objects
-          .filter((object) => object.data.name !== "Logo" && object.path)
-          .map((object) => object.path!)
-          .join(" ");
-        if (holes) logo.data.clipSubtract = holes;
+      if (logo) {
+        if (!keep) {
+          // Rebuild punches from every piece footprint so Remove always clears what you can move.
+          const holes = removeHolesFromScene(scene, logo.data.clipSubtract);
+          if (holes) logo.data.clipSubtract = holes;
+        } else if (!logo.data.clipSubtract) {
+          // Keep: only seed when missing — do not replace word-band rects from Edit elements.
+          const holes = scene.objects
+            .filter((object) => object.data.name !== "Logo" && object.path)
+            .map((object) => object.path!)
+            .join(" ");
+          if (holes) logo.data.clipSubtract = holes;
+        }
       }
       await this.restore(JSON.stringify(scene), selection);
     } finally {
@@ -2678,6 +2690,42 @@ function isAxisAlignedRectPath(pathD: string) {
   return /^\s*M\s+[-\d.]+\s+[-\d.]+\s+H\s+[-\d.]+\s+V\s+[-\d.]+\s+H\s+[-\d.]+\s+Z\s*$/i.test(
     pathD.trim(),
   );
+}
+
+function paddedBoundsPath(
+  box: { x: number; y: number; width: number; height: number },
+  pad: number,
+) {
+  const x = box.x - pad;
+  const y = box.y - pad;
+  const right = box.x + box.width + pad;
+  const bottom = box.y + box.height + pad;
+  return `M ${x} ${y} H ${right} V ${bottom} H ${x} Z`;
+}
+
+/**
+ * Remove mode: keep exact word-band rects, and for each mark subpath also punch a padded
+ * bounding rect so a slightly-wrong star outline cannot leave a full copy on the Logo.
+ */
+function fortifyRemoveHoles(pathD: string, pad = 12) {
+  return splitSubpaths(pathD)
+    .flatMap((sub) => {
+      if (isAxisAlignedRectPath(sub)) return [sub];
+      const box = pathBounds(sub);
+      if (!box || !(box.width > 0) || !(box.height > 0)) return [sub];
+      return [sub, paddedBoundsPath(box, pad)];
+    })
+    .join(" ");
+}
+
+/** Merge preserved word-band rects with every movable piece path (plus padded coverage). */
+function removeHolesFromScene(scene: SceneDocument, existing?: string) {
+  const wordBands = existing ? splitSubpaths(existing).filter(isAxisAlignedRectPath) : [];
+  const piecePaths = scene.objects
+    .filter((object) => object.data.name !== "Logo" && object.path)
+    .map((object) => object.path!);
+  const joined = [...wordBands, ...piecePaths].join(" ");
+  return joined ? fortifyRemoveHoles(joined) : undefined;
 }
 
 /** True when pathD is an axis-aligned rect covering the piece crop (Logo plate). */

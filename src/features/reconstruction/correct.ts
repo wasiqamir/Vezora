@@ -1,4 +1,5 @@
 import type { ProjectDocument, ProjectObject } from "@/features/projects/document";
+import type { TextHit } from "@/features/reconstruction/ocr";
 import { pathBounds } from "@/features/reconstruction/paths";
 
 const MAX_PATH = 200_000;
@@ -86,6 +87,194 @@ export function preferEditableElements(document: ProjectDocument): ProjectDocume
 }
 
 /**
+ * Attach OCR hits as live text (artboard space). When letter-row bands are provided, each
+ * word is placed on that band so letter path slices are covered and removed — click the
+ * word to edit font, size, weight, and color in Style.
+ */
+export function attachLiveText(
+  document: ProjectDocument,
+  hits: TextHit[],
+  imageWidth: number,
+  imageHeight: number,
+  bandsArtboard: Array<{ x: number; y: number; width: number; height: number }> = [],
+): ProjectDocument {
+  if (imageWidth < 1 || imageHeight < 1) return document;
+  const scaleX = document.artboard.width / imageWidth;
+  const scaleY = document.artboard.height / imageHeight;
+  const background = document.artboard.background;
+  const fill = contrastText(background);
+  const existing = new Set(
+    document.objects
+      .filter((object) => object.type === "text" && object.text?.trim())
+      .map((object) => (object.text ?? "").trim().toLowerCase()),
+  );
+  const texts: ProjectObject[] = [];
+  const usedHits = new Set<number>();
+
+  // Prefer one text object per traced letter-row — geometry from the band, label from OCR.
+  for (const [bandIndex, band] of bandsArtboard.entries()) {
+    let bestIndex = -1;
+    let bestScore = -1;
+    for (const [hitIndex, hit] of hits.entries()) {
+      if (usedHits.has(hitIndex)) continue;
+      const label = hit.text.trim();
+      if (!label || label.includes(" ") || existing.has(label.toLowerCase())) continue;
+      const box = {
+        x: hit.x * scaleX,
+        y: hit.y * scaleY,
+        width: hit.width * scaleX,
+        height: hit.height * scaleY,
+      };
+      if (!overlaps(band, box)) continue;
+      const score = (hit.confidence ?? 50) + Math.min(box.width, band.width) / Math.max(band.width, 1);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = hitIndex;
+      }
+    }
+    if (bestIndex < 0) continue;
+    const hit = hits[bestIndex]!;
+    const label = hit.text.trim();
+    usedHits.add(bestIndex);
+    existing.add(label.toLowerCase());
+    texts.push(
+      liveTextObject({
+        index: bandIndex,
+        label,
+        x: band.x,
+        y: band.y,
+        width: band.width,
+        height: band.height,
+        fill,
+        confidence: hit.confidence,
+      }),
+    );
+  }
+
+  // Remaining OCR hits (no band) still become editable words.
+  for (const [hitIndex, hit] of hits.entries()) {
+    if (usedHits.has(hitIndex)) continue;
+    const label = hit.text.trim();
+    if (!label || existing.has(label.toLowerCase())) continue;
+    // Prefer split words over a glued "BLOOM ATELIER" line when parts already exist.
+    if (label.includes(" ")) {
+      const parts = label.split(/\s+/).filter(Boolean);
+      if (parts.every((part) => existing.has(part.toLowerCase()))) continue;
+    }
+    existing.add(label.toLowerCase());
+    texts.push(
+      liveTextObject({
+        index: texts.length,
+        label,
+        x: hit.x * scaleX,
+        y: hit.y * scaleY,
+        width: hit.width * scaleX,
+        height: hit.height * scaleY,
+        fill,
+        confidence: hit.confidence,
+      }),
+    );
+  }
+
+  if (texts.length === 0) return document;
+  return {
+    ...document,
+    objects: [...document.objects, ...texts],
+  };
+}
+
+function liveTextObject(input: {
+  index: number;
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fill: string;
+  confidence?: number;
+}): ProjectObject {
+  const width = Math.max(8, round(input.width));
+  const height = Math.max(8, round(input.height));
+  return {
+    id: `obj_text_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+    type: "text",
+    name: input.label.slice(0, 40) || `Text ${input.index + 1}`,
+    text: input.label,
+    x: round(input.x),
+    y: round(input.y),
+    width,
+    height,
+    scaleX: 1,
+    scaleY: 1,
+    angle: 0,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    fill: input.fill,
+    fontFamily: "Outfit",
+    fontId: "outfit",
+    fontSize: Math.max(12, Math.min(240, Math.round(height * 0.82))),
+    fontWeight: 600,
+    letterSpacing: 0,
+    lineHeight: 1.16,
+    textAlign: "left",
+    ...(typeof input.confidence === "number" && Number.isFinite(input.confidence)
+      ? { confidence: Math.max(0, Math.min(100, Math.round(input.confidence))) }
+      : {}),
+  };
+}
+
+function contrastText(background: string | null) {
+  if (!background || !/^#[0-9a-fA-F]{6}$/.test(background)) return "#171717";
+  return luma(background) < 0.55 ? "#ffffff" : "#171717";
+}
+
+/**
+ * Horizontal clusters of traced letter paths (or a single wide word path) — artboard space.
+ * Used to OCR each word row and place one live text object over the whole word.
+ */
+export function textLikeBands(document: ProjectDocument) {
+  const boardArea = Math.max(1, document.artboard.width * document.artboard.height);
+  const letters = document.objects.filter((object) => {
+    if (object.type !== "path" || !object.path || object.visible === false) return false;
+    const width = Math.abs(object.width * object.scaleX);
+    const height = Math.abs(object.height * object.scaleY);
+    const area = width * height;
+    // Skip large marks (icons) and dust; keep letter-sized and whole-word outlines.
+    if (area / boardArea > 0.12) return false;
+    if (area < boardArea * 0.00015 && Math.min(width, height) < 6) return false;
+    return height >= 6 && width >= 3;
+  });
+  if (letters.length === 0) return [] as Array<{ x: number; y: number; width: number; height: number }>;
+
+  const sorted = [...letters].sort((left, right) => bounds(left).y - bounds(right).y);
+  const bands: Array<{ x: number; y: number; width: number; height: number; count: number }> = [];
+  for (const object of sorted) {
+    const box = bounds(object);
+    const midY = box.y + box.height / 2;
+    const open = bands.find((band) => Math.abs(midY - (band.y + band.height / 2)) <= Math.max(14, band.height * 0.55));
+    if (!open) {
+      bands.push({ x: box.x, y: box.y, width: box.width, height: box.height, count: 1 });
+      continue;
+    }
+    const right = Math.max(open.x + open.width, box.x + box.width);
+    const bottom = Math.max(open.y + open.height, box.y + box.height);
+    open.x = Math.min(open.x, box.x);
+    open.y = Math.min(open.y, box.y);
+    open.width = right - open.x;
+    open.height = bottom - open.y;
+    open.count += 1;
+  }
+  return bands
+    .filter(
+      (band) =>
+        band.width >= band.height * 1.15 &&
+        (band.count >= 2 || band.width >= Math.max(48, band.height * 2.2)),
+    )
+    .map(({ x, y, width, height }) => ({ x, y, width, height }));
+}
+
+/**
  * Exact upload as Logo (with holes) + clipped pieces for marks + live OCR words.
  * Letter outlines under a detected word become one editable text object (font/size/color).
  * Full-board plates are skipped — Logo carries that exact content (and anything tracer missed).
@@ -110,7 +299,8 @@ export function asExactEditablePieces(
   const words = document.objects.filter(
     (object) => object.type === "text" && Boolean(object.text?.trim()),
   );
-  // Paths under a word (with padding) are letters / letter rings — never keep them as slices.
+  // Paths under a word are letters / letter rings — never keep them as image slices.
+  // Band-aligned live text (attachLiveText) makes this overlap reliable for BLOOM / ATELIER.
   const letterPathIds = new Set<string>();
   for (const word of words) {
     for (const id of overlappingPathIds(document, word, wordPad(word))) letterPathIds.add(id);
@@ -226,7 +416,6 @@ function editableWordFromLetters(
   const label = (word.text ?? "").trim();
   const boxHeight = Math.max(8, Math.abs(word.height * word.scaleY));
   const boxWidth = Math.max(8, Math.abs(word.width * word.scaleX));
-  const darkBoard = luma(background && /^#[0-9a-fA-F]{6}$/.test(background) ? background : "#111122") < 0.4;
   // Short display words → Didot-like serif; longer/smaller lines → spaced sans tagline.
   const tagline =
     label.length >= 6 && boxHeight <= Math.max(48, Math.round(document.artboard.height * 0.06));
@@ -243,14 +432,19 @@ function editableWordFromLetters(
   );
   const width = Math.max(24, Math.round(boxWidth));
   const height = Math.max(8, Math.round(Math.max(boxHeight, fontSize * inkRatio)));
+  // Prefer traced letter fills (e.g. orange tagline) when they stay readable on the board.
+  const letterIds = overlappingPathIds(document, word, wordPad(word));
+  const letterFills = document.objects
+    .filter((object) => object.type === "path" && letterIds.has(object.id))
+    .map((object) => object.fill)
+    .filter((value): value is string => typeof value === "string");
   return {
     ...word,
     type: "text",
     visible: true,
     locked: false,
     opacity: 1,
-    // Match the upload: light ink on dark boards, never a muddy sampled pink ghost.
-    fill: darkBoard ? "#ffffff" : pickReadableFill([], word.fill, background),
+    fill: pickReadableFill(letterFills, word.fill, background),
     fontSize,
     width,
     height,

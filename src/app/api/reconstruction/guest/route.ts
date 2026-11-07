@@ -42,13 +42,13 @@ export async function POST(request: Request) {
 
     const assetId = `guest_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
     const jobId = `guest_${assetId}`.slice(0, 80);
-    // Trace only on guest — Tesseract often crashes/empties the serverless response on Vercel.
+    // Skip OCR on Vercel (Tesseract crashes); local/dev can read words. Browser OCR still runs after.
     const draft = await buildReconstructionDraft({
       bytes,
       mimeType: file.type || "image/png",
       assetId,
       jobId,
-      ocrTimeoutMs: 0,
+      ocrTimeoutMs: process.env.VERCEL ? 0 : 20_000,
       maxEdge: 960,
       fastOcr: true,
     });

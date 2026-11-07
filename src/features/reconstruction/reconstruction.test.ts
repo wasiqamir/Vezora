@@ -5,10 +5,12 @@ import { migrateDocument, type ProjectDocument } from "../projects/document.ts";
 import { templatePreviewSvg } from "../templates/preview.ts";
 import {
   asExactEditablePieces,
+  attachLiveText,
   mergePaths,
   preferEditableElements,
   preferEditableText,
   preferVectorOutlines,
+  textLikeBands,
   useEditableText,
   useVectorOutlines,
 } from "./correct.ts";
@@ -277,8 +279,8 @@ describe("reconstruction correction", () => {
     assert.equal(petal?.type, "image");
     assert.equal(letterSlice, undefined);
     assert.equal(word?.text, "BLOOM");
-    // Dark boards get clean white live text — not muddy sampled letter fills.
-    assert.equal(word?.fill, "#ffffff");
+    // Live text picks a readable letter fill (near-white ink on the dark board).
+    assert.equal(word?.fill, "#f5f5f5");
     assert.equal(word?.fontId, "bodoni-moda");
     // Em size tracks the OCR ink box so live text matches the upload scale.
     assert.equal(word?.fontSize, 53);
@@ -365,6 +367,153 @@ describe("reconstruction correction", () => {
     assert.equal(cleaned.objects.find((item) => item.type === "text")?.visible, true);
     assert.equal(cleaned.objects.find((item) => item.type === "text")?.locked, false);
     assert.equal(cleaned.objects.find((item) => item.type === "path")?.locked, false);
+  });
+
+  it("groups small path rows into text-like bands for OCR crops", () => {
+    const withLetters: ProjectDocument = {
+      ...document,
+      objects: [
+        object("path", "B", {
+          x: 40,
+          y: 200,
+          width: 30,
+          height: 50,
+          path: "M 40 200 H 70 V 250 H 40 Z",
+          fill: "#fff",
+        }),
+        object("path", "L", {
+          x: 80,
+          y: 205,
+          width: 28,
+          height: 48,
+          path: "M 80 205 H 108 V 253 H 80 Z",
+          fill: "#fff",
+        }),
+        object("path", "O", {
+          x: 120,
+          y: 202,
+          width: 32,
+          height: 50,
+          path: "M 120 202 H 152 V 252 H 120 Z",
+          fill: "#fff",
+        }),
+        object("path", "Mark", {
+          x: 400,
+          y: 40,
+          width: 80,
+          height: 80,
+          path: "M 400 40 H 480 V 120 H 400 Z",
+          fill: "#f0abfc",
+        }),
+      ],
+    };
+    const bands = textLikeBands(withLetters);
+    assert.equal(bands.length, 1);
+    assert.ok(bands[0]!.width > 100);
+    assert.ok(bands[0]!.y >= 200 && bands[0]!.y <= 210);
+  });
+
+  it("attaches OCR hits as live text scaled to the artboard", () => {
+    const base: ProjectDocument = {
+      ...document,
+      artboard: { ...document.artboard, width: 500, height: 500, background: "#111122" },
+      objects: [
+        object("path", "Mark", {
+          x: 10,
+          y: 10,
+          width: 40,
+          height: 40,
+          path: "M 10 10 H 50 V 50 H 10 Z",
+          fill: "#eea9fa",
+        }),
+      ],
+    };
+    const withText = attachLiveText(
+      base,
+      [{ text: "VOLT", x: 100, y: 200, width: 200, height: 80, confidence: 90 }],
+      1000,
+      1000,
+    );
+    const word = withText.objects.find((item) => item.type === "text");
+    assert.equal(word?.text, "VOLT");
+    assert.equal(word?.x, 50);
+    assert.equal(word?.y, 100);
+    assert.equal(word?.width, 100);
+    assert.equal(word?.height, 40);
+    const pieces = asExactEditablePieces(
+      preferEditableElements(withText),
+      object("image", "Original", {
+        x: 0,
+        y: 0,
+        width: 500,
+        height: 500,
+        assetId: "asset_volt",
+      }),
+    );
+    assert.equal(pieces.objects.find((item) => item.type === "text")?.text, "VOLT");
+    assert.equal(pieces.objects.find((item) => item.type === "text")?.fontSize !== undefined, true);
+  });
+
+  it("places each OCR word on its letter-row band so Style can edit the full word", () => {
+    const base: ProjectDocument = {
+      ...document,
+      artboard: { ...document.artboard, width: 1000, height: 1000, background: "#1A1028" },
+      objects: [
+        object("path", "B", {
+          x: 250,
+          y: 520,
+          width: 40,
+          height: 70,
+          path: "M 250 520 H 290 V 590 H 250 Z",
+          fill: "#FDF4FF",
+        }),
+        object("path", "L", {
+          x: 300,
+          y: 520,
+          width: 40,
+          height: 70,
+          path: "M 300 520 H 340 V 590 H 300 Z",
+          fill: "#FDF4FF",
+        }),
+        object("path", "O", {
+          x: 350,
+          y: 520,
+          width: 40,
+          height: 70,
+          path: "M 350 520 H 390 V 590 H 350 Z",
+          fill: "#FDF4FF",
+        }),
+      ],
+    };
+    const band = { x: 250, y: 520, width: 140, height: 70 };
+    const withText = attachLiveText(
+      base,
+      [{ text: "BLOOM", x: 260, y: 530, width: 100, height: 50, confidence: 92 }],
+      1000,
+      1000,
+      [band],
+    );
+    const word = withText.objects.find((item) => item.type === "text");
+    assert.equal(word?.text, "BLOOM");
+    assert.equal(word?.x, 250);
+    assert.equal(word?.y, 520);
+    assert.equal(word?.width, 140);
+    assert.equal(word?.height, 70);
+    const pieces = asExactEditablePieces(
+      preferEditableElements(withText),
+      object("image", "Original", {
+        x: 0,
+        y: 0,
+        width: 1000,
+        height: 1000,
+        assetId: "asset_bloom",
+      }),
+    );
+    assert.equal(pieces.objects.find((item) => item.type === "text")?.text, "BLOOM");
+    assert.equal(
+      pieces.objects.some((item) => item.type === "image" && item.name !== "Logo"),
+      false,
+    );
   });
 
   it("merges two shapes and leaves the original image untouched", () => {
