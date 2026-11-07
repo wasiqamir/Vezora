@@ -79,11 +79,14 @@ export function ExportDialog({
   projectId,
   projectName,
   onExport,
+  onExported,
   onClose,
 }: {
   projectId: string;
   projectName: string;
   onExport: (request: ExportRequest) => Promise<ExportFile>;
+  /** After a successful download — record a counted account save (not artboard autosave). */
+  onExported?: () => void | Promise<void>;
   onClose: () => void;
 }) {
   const [format, setFormat] = useState<ExportFormat>("svg");
@@ -172,6 +175,11 @@ export function ExportDialog({
       const body = new FormData();
       body.set("file", file.blob, file.filename);
       void fetch(`/api/projects/${projectId}/image`, { method: "POST", body });
+      try {
+        await onExported?.();
+      } catch {
+        // Download already succeeded; save count can catch up on the next export.
+      }
       setWaiting(false);
     } catch {
       if (requestId.current !== id) return;

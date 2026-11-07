@@ -670,6 +670,36 @@ export function EditorWorkspace({
             if (!controller) return Promise.reject(new Error("Export failed."));
             return controller.createExport(request);
           }}
+          onExported={async () => {
+            if (guest) return;
+            const controller = controllerRef.current;
+            if (!controller) return;
+            // Only exports create a counted account save — artboard edits stay as silent autosaves.
+            let image: string | undefined;
+            try {
+              const file = await controller.createExport({
+                projectName: nameRef.current,
+                format: "png",
+                scale: 1,
+                background: "artboard",
+              });
+              if (file.blob.size <= 2_500_000) image = await blobToBase64(file.blob);
+            } catch {
+              image = undefined;
+            }
+            const response = await fetch(`/api/projects/${projectId}/document`, {
+              method: "PUT",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                document: controller.projectDocument(),
+                source: "save",
+                image,
+              }),
+            });
+            if (!response.ok) throw new Error("Save failed.");
+            savedRevision.current = Math.max(savedRevision.current, snapshot.revision);
+            setSaveState("saved");
+          }}
         />
       ) : null}
       <EditorFooter

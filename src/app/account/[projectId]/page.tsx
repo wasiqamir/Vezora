@@ -50,11 +50,13 @@ async function AccountDesignContent({
   const design = await getAccountDesign(session.user.id, projectId);
   if (!design) notFound();
   const requested = query.version && isResourceId(query.version) ? query.version : design.versions[0]?.id;
-  const selected = design.versions.find((version) => version.id === requested) ?? design.versions[0];
-  if (!selected) notFound();
+  const selected =
+    design.versions.find((version) => version.id === requested) ??
+    design.versions[0] ??
+    design.workingVersion;
   const preview = await getOwnedVersion(session.user.id, projectId, selected.id);
   if (!preview) notFound();
-  const latest = design.versions[0];
+  const latest = design.versions[0] ?? design.workingVersion;
 
   return (
     <main className="relative flex-1 overflow-hidden bg-[#07041c] text-white">
@@ -162,11 +164,18 @@ async function AccountDesignContent({
               <p className="text-[11px] tracking-[0.22em] text-white/40 uppercase">Saves</p>
               <h2 className="mt-1 text-lg font-semibold tracking-tight">Version trail</h2>
               <p className="mt-2 text-sm leading-relaxed text-white/55">
-                {design.saves > design.versions.length
-                  ? `Showing the latest ${design.versions.length} of ${design.saves} saves.`
-                  : "Each save stays on this account."}
+                {design.saves === 0
+                  ? "Exports appear here. Editing the artboard does not add a save."
+                  : design.saves > design.versions.length
+                    ? `Showing the latest ${design.versions.length} of ${design.saves} exports.`
+                    : "Each export stays on this account."}
               </p>
               <ol className="mt-5 flex flex-col gap-2">
+                {design.versions.length === 0 ? (
+                  <li className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-sm text-white/50">
+                    No exports yet.
+                  </li>
+                ) : null}
                 {design.versions.map((version) => {
                   const current = version.id === selected.id;
                   return (
@@ -217,7 +226,7 @@ function sourceLabel(source: VersionSource) {
   if (source === "duplicate") return "Copied";
   if (source === "template") return "Started from a template";
   if (source === "reconstruction") return "Built from an image";
-  return "Saved";
+  return "Exported";
 }
 
 function formatWhen(value: Date) {

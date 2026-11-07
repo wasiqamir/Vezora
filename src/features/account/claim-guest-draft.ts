@@ -48,7 +48,7 @@ export async function claimGuestDraftAction(formData: FormData) {
 
   document = await materializeGuestAssets(session.user.id, document, assets);
 
-  const source = templateSlug === "blank" ? "save" : "template";
+  const source = templateSlug === "blank" ? "autosave" : "template";
   const project = await createProject(session.user.id, projectName, document, source);
   redirect(openExport ? `/editor/${project.id}?export=1` : `/editor/${project.id}`);
 }

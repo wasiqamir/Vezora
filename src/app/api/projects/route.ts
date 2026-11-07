@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   }
   const name = cleanProjectName(parsed.data.name ?? "Untitled logo");
   if (!name) return projectError("validation_failed", "Enter a project name.", 422);
-  const project = await createProject(userId, name, blankProjectDocument(), "save");
+  const project = await createProject(userId, name, blankProjectDocument(), "autosave");
   return Response.json(
     { project: { id: project.id, name: project.name, updatedAt: project.updatedAt.toISOString() } },
     { status: 201 },

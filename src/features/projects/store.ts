@@ -117,7 +117,8 @@ export async function createProject(
 }
 
 export async function createBlankProject(ownerId: string, name = "Untitled logo") {
-  return createProject(ownerId, name, blankProjectDocument(), "save");
+  // Working draft only — account "Saves" increments when the logo is exported.
+  return createProject(ownerId, name, blankProjectDocument(), "autosave");
 }
 
 export async function getOwnedProject(ownerId: string, projectId: string) {
@@ -271,17 +272,28 @@ export async function saveProjectDocument(
     const latest = await tx.projectVersion.findFirst({
       where: { projectId },
       orderBy: { number: "desc" },
-      select: { number: true },
+      select: { id: true, number: true },
     });
-    const number = (latest?.number ?? 0) + 1;
-    await tx.projectVersion.create({
-      data: {
-        projectId,
-        number,
-        document: document as Prisma.InputJsonValue,
-        source,
-      },
-    });
+    // Autosave keeps the working draft only — does not add an account "save".
+    // Export (source: save) appends a counted version.
+    let number: number;
+    if (source === "autosave" && latest) {
+      number = latest.number;
+      await tx.projectVersion.update({
+        where: { id: latest.id },
+        data: { document: document as Prisma.InputJsonValue },
+      });
+    } else {
+      number = (latest?.number ?? 0) + 1;
+      await tx.projectVersion.create({
+        data: {
+          projectId,
+          number,
+          document: document as Prisma.InputJsonValue,
+          source,
+        },
+      });
+    }
     const updated = await tx.project.update({
       where: { id: projectId },
       data: { schemaVersion: document.schemaVersion },
@@ -322,7 +334,7 @@ export async function listAccountDesigns(ownerId: string) {
       updatedAt: true,
       shareToken: true,
       imageUrl: true,
-      _count: { select: { versions: true } },
+      _count: { select: { versions: { where: { source: "save" } } } },
       versions: {
         orderBy: { number: "desc" },
         take: 1,
@@ -340,6 +352,7 @@ export async function listAccountDesigns(ownerId: string) {
           name: project.name,
           updatedAt: project.updatedAt,
           shared: Boolean(project.shareToken),
+          // Only export saves (source: save) — artboard autosaves do not count.
           saves: project._count.versions,
           imageUrl: project.imageUrl,
           document: migrateDocument(latest.document),
@@ -360,20 +373,30 @@ export async function getAccountDesign(ownerId: string, projectId: string) {
       id: true,
       name: true,
       shareToken: true,
+      _count: { select: { versions: { where: { source: "save" } } } },
       versions: {
+        where: { source: "save" },
         orderBy: { number: "desc" },
         take: HISTORY_LIMIT,
         select: { id: true, number: true, source: true, createdAt: true },
       },
-      _count: { select: { versions: true } },
     },
   });
-  if (!project || project.versions.length === 0) return null;
+  if (!project) return null;
+  const workingVersion =
+    project.versions[0] ??
+    (await prisma.projectVersion.findFirst({
+      where: { projectId: project.id },
+      orderBy: { number: "desc" },
+      select: { id: true, number: true, source: true, createdAt: true },
+    }));
+  if (!workingVersion) return null;
   return {
     id: project.id,
     name: project.name,
     shareToken: project.shareToken,
     versions: project.versions,
+    workingVersion,
     saves: project._count.versions,
   };
 }

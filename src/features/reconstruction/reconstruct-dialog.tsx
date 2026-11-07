@@ -448,7 +448,7 @@ export function ReconstructDialog({
     const response = await fetch(`/api/projects/${projectId}/document`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ document: nextDocument, source: "save" }),
+      body: JSON.stringify({ document: nextDocument, source: "autosave" }),
     });
     setSaving(false);
     if (!response.ok) {
