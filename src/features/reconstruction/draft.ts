@@ -150,7 +150,6 @@ function imageObject(assetId: string, width: number, height: number, scale: numb
     // Hidden while traced shapes are the editable logo. Side by side / eye can reveal it alone.
     visible: false,
     locked: true,
-    opacity: 1,
     assetId,
   };
 }

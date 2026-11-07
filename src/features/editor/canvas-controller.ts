@@ -1186,7 +1186,6 @@ export class CanvasController {
       if (this.initialDocument) {
         const preferred = preferExactUpload(this.initialDocument);
         collapsedToExact = preferred !== this.initialDocument;
-        this.initialDocument = preferred;
         this.reconstruction = preferred.reconstruction ?? null;
         await this.restore(JSON.stringify(sceneFromProject(preferred)), []);
         await this.waitForDocumentFonts();
