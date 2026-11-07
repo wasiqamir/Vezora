@@ -355,7 +355,8 @@ export function promoteWordSliceToLiveText(
     opacity: object.opacity,
     visible: true,
     locked: false,
-    fill: patch.fill ?? contrastText(document.artboard.background),
+    // Keep the slice's existing fill when promoting for a font change; never invent a new ink.
+    fill: patch.fill ?? (typeof object.fill === "string" ? object.fill : contrastText(document.artboard.background)),
     fontSize,
     fontId: patch.fontId ?? "outfit",
     fontFamily: patch.fontFamily ?? "Outfit",

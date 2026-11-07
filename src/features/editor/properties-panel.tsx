@@ -137,7 +137,15 @@ export function PropertiesPanel({
                   aria-label="Text"
                   rows={2}
                   className="w-full resize-none rounded-xl border border-white/12 bg-white/[0.04] px-3 py-2.5 text-sm text-white outline-none focus-visible:border-[#c4b5fd]/55 focus-visible:ring-3 focus-visible:ring-[#c4b5fd]/20"
-                  onChange={(event) => onPatch({ text: event.target.value })}
+                  onChange={(event) =>
+                    onPatch({
+                      text: event.target.value,
+                      // Keep the Style color when promoting a word slice — font/text edits must not invent a new fill.
+                      ...(selection.type === "image"
+                        ? { fill: selection.fill ?? selection.sourceColor ?? undefined }
+                        : {}),
+                    })
+                  }
                 />
               </Field>
               <Field label="Font">
@@ -148,7 +156,14 @@ export function PropertiesPanel({
                       ? ORIGINAL_WORD_FONT_ID
                       : (selection.fontId ?? "outfit")
                   }
-                  onChange={(value) => onPatch({ fontId: value })}
+                  onChange={(value) =>
+                    onPatch({
+                      fontId: value,
+                      ...(selection.type === "image"
+                        ? { fill: selection.fill ?? selection.sourceColor ?? undefined }
+                        : {}),
+                    })
+                  }
                   groups={fontGroupsForSelection(fonts, selection).map((group) => ({
                     category: group.category,
                     options: group.fonts.map((font) => ({ value: font.id, label: font.label })),
@@ -163,13 +178,27 @@ export function PropertiesPanel({
                   min={8}
                   max={500}
                   live
-                  onCommit={(fontSize) => onPatch({ fontSize })}
+                  onCommit={(fontSize) =>
+                    onPatch({
+                      fontSize,
+                      ...(selection.type === "image"
+                        ? { fill: selection.fill ?? selection.sourceColor ?? undefined }
+                        : {}),
+                    })
+                  }
                 />
                 <Field label="Weight">
                   <PanelSelect
                     ariaLabel="Weight"
                     value={String(selection.fontWeight ?? 500)}
-                    onChange={(value) => onPatch({ fontWeight: Number(value) })}
+                    onChange={(value) =>
+                      onPatch({
+                        fontWeight: Number(value),
+                        ...(selection.type === "image"
+                          ? { fill: selection.fill ?? selection.sourceColor ?? undefined }
+                          : {}),
+                      })
+                    }
                     options={WEIGHTS}
                   />
                 </Field>

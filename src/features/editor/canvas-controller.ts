@@ -785,6 +785,7 @@ export class CanvasController {
         scaleX: 1,
         scaleY: 1,
       });
+      // Keep the current fill — font changes must not recolor the word.
     }
     if (patch.fontSize !== undefined && object instanceof IText) {
       object.set({ fontSize: clamp(Math.round(patch.fontSize), 8, 500), scaleX: 1, scaleY: 1 });
@@ -1304,9 +1305,12 @@ export class CanvasController {
     const inkRatio = 0.75;
     const fontSize =
       patch.fontSize ?? Math.max(12, Math.min(220, Math.round(boxHeight / inkRatio)));
+    // Font/size/weight must not invent a new color — only an explicit Color change should.
+    // Prefer the Style swatch (patch.fill / piece tint / same sample the Color field shows).
+    const pieceTint = object instanceof FabricImage ? hexColor(object.fill) : null;
     const sampled =
-      object instanceof FabricImage ? this.sampleImagePieceColor(object, 200) : null;
-    const fill = patch.fill ?? sampled ?? this.contrastInk();
+      object instanceof FabricImage ? this.sampleImagePieceColor(object) : null;
+    const fill = patch.fill ?? pieceTint ?? sampled ?? this.contrastInk();
 
     const wordSlice: WordSliceBackup = {
       assetId,
