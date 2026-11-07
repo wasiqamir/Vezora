@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AlignControls } from "@/features/editor/align-controls";
 import type { AlignEdge } from "@/features/editor/align";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PanelSelect } from "@/components/ui/panel-select";
 import { ColorInput } from "@/features/editor/color-input";
 import type { EditorFontOption, EditorTool, SelectionPatch, SelectionSnapshot } from "@/features/editor/types";
+
+const quiet =
+  "rounded-full border-white/15 bg-white/[0.04] text-white hover:bg-white/10 hover:text-white";
 
 const WEIGHTS = [
   { value: "400", label: "Regular" },
@@ -35,11 +39,16 @@ export function PropertiesPanel({
   fonts,
   selection,
   selectionCount,
+  tool,
+  offsetDistance,
+  onOffsetDistance,
   onPatch,
   onFlipPath,
   onStraighten,
   onDuplicate,
   onDelete,
+  onAlign,
+  onDistribute,
 }: PropertiesPanelProps) {
   return (
     <div className="flex flex-col gap-5 border-b border-white/10 p-5 text-white">
@@ -47,6 +56,29 @@ export function PropertiesPanel({
         <p className="text-[11px] tracking-[0.28em] text-white/40 uppercase">Inspect</p>
         <h2 className="mt-1 text-lg font-semibold tracking-tight text-white">Style</h2>
       </div>
+
+      <NumberField
+        resetKey={`offset:${offsetDistance}`}
+        label="Offset"
+        value={offsetDistance}
+        min={-400}
+        max={400}
+        onCommit={onOffsetDistance}
+      />
+      <p className="text-xs leading-relaxed text-white/45">
+        Positive grows the Offset copy. Negative shrinks it.
+      </p>
+
+      {tool === "pen" ? (
+        <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm leading-relaxed text-white/55">
+          Click to add points. Drag to curve a point. Click the first point to close. Enter finishes, Escape cancels.
+        </p>
+      ) : null}
+      {tool === "nodes" ? (
+        <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm leading-relaxed text-white/55">
+          Drag a point. The curves on either side keep their shape.
+        </p>
+      ) : null}
 
       {selectionCount === 0 ? (
         <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-5 text-sm leading-relaxed text-white/55">
@@ -58,11 +90,29 @@ export function PropertiesPanel({
         <div className="flex flex-col gap-4">
           <p className="text-sm text-white/60">{selectionCount} selected</p>
           <ActionRow onDuplicate={onDuplicate} onDelete={onDelete} />
+          <AlignControls
+            count={selectionCount}
+            disabled={false}
+            onAlign={onAlign}
+            onDistribute={onDistribute}
+          />
         </div>
       ) : null}
 
       {selection ? (
         <div className="flex flex-col gap-5">
+          <Field label="Name">
+            <Input
+              value={selection.name}
+              aria-label="Name"
+              className="h-10 rounded-xl border-white/12 bg-white/[0.04] text-sm tracking-normal text-white normal-case"
+              onChange={(event) => onPatch({ name: event.target.value })}
+            />
+          </Field>
+          {selection.locked ? (
+            <p className="text-xs text-white/45">Locked. Unlock it in the layers list to move it.</p>
+          ) : null}
+
           {selection.type === "text" ? (
             <div className="flex flex-col gap-3.5">
               <Field label="Text">
@@ -105,25 +155,36 @@ export function PropertiesPanel({
                 </Field>
               </div>
               {selection.onPath ? (
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1 rounded-full border-white/15 bg-white/[0.04] text-white hover:bg-white/10 hover:text-white"
+                <div className="flex flex-col gap-3">
+                  <NumberField
+                    resetKey={`${selection.id}:path`}
+                    label="Path start"
+                    value={selection.pathStartOffset ?? 0}
+                    min={-2000}
+                    max={2000}
                     disabled={selection.locked}
-                    onClick={onFlipPath}
-                  >
-                    Flip path
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1 rounded-full border-white/15 bg-white/[0.04] text-white hover:bg-white/10 hover:text-white"
-                    disabled={selection.locked}
-                    onClick={onStraighten}
-                  >
-                    Straighten
-                  </Button>
+                    onCommit={(pathStartOffset) => onPatch({ pathStartOffset })}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={`flex-1 ${quiet}`}
+                      disabled={selection.locked}
+                      onClick={onFlipPath}
+                    >
+                      Flip path
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={`flex-1 ${quiet}`}
+                      disabled={selection.locked}
+                      onClick={onStraighten}
+                    >
+                      Straighten
+                    </Button>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -144,7 +205,7 @@ export function PropertiesPanel({
             )}
           </div>
 
-          {selection.stroke ? (
+          {selection.type === "image" ? null : (
             <NumberField
               resetKey={`${selection.id}:stroke:${selection.strokeWidth}`}
               label="Stroke width"
@@ -152,6 +213,17 @@ export function PropertiesPanel({
               min={0}
               max={80}
               onCommit={(strokeWidth) => onPatch({ strokeWidth })}
+            />
+          )}
+
+          {selection.type === "rect" ? (
+            <NumberField
+              resetKey={`${selection.id}:corner`}
+              label="Corner"
+              value={selection.cornerRadius ?? 0}
+              min={0}
+              max={400}
+              onCommit={(cornerRadius) => onPatch({ cornerRadius })}
             />
           ) : null}
 
@@ -166,6 +238,54 @@ export function PropertiesPanel({
               onChange={(event) => onPatch({ opacity: Number(event.target.value) / 100 })}
             />
           </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <NumberField
+              resetKey={`${selection.id}:x`}
+              label="X"
+              value={selection.x}
+              disabled={selection.locked}
+              onCommit={(x) => onPatch({ x })}
+            />
+            <NumberField
+              resetKey={`${selection.id}:y`}
+              label="Y"
+              value={selection.y}
+              disabled={selection.locked}
+              onCommit={(y) => onPatch({ y })}
+            />
+            <NumberField
+              resetKey={`${selection.id}:w`}
+              label="W"
+              value={selection.width}
+              min={1}
+              disabled={selection.locked}
+              onCommit={(width) => onPatch({ width })}
+            />
+            <NumberField
+              resetKey={`${selection.id}:h`}
+              label="H"
+              value={selection.height}
+              min={1}
+              disabled={selection.locked}
+              onCommit={(height) => onPatch({ height })}
+            />
+          </div>
+
+          <NumberField
+            resetKey={`${selection.id}:angle`}
+            label="Rotation"
+            value={selection.angle}
+            disabled={selection.locked}
+            onCommit={(angle) => onPatch({ angle })}
+          />
+
+          <AlignControls
+            count={selectionCount}
+            disabled={selection.locked}
+            onAlign={onAlign}
+            onDistribute={onDistribute}
+          />
 
           <ActionRow onDuplicate={onDuplicate} onDelete={onDelete} />
         </div>
@@ -183,12 +303,7 @@ function ActionRow({
 }) {
   return (
     <div className="flex gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        className="flex-1 rounded-full border-white/15 bg-white/[0.04] text-white hover:bg-white/10 hover:text-white"
-        onClick={onDuplicate}
-      >
+      <Button type="button" variant="outline" className={`flex-1 ${quiet}`} onClick={onDuplicate}>
         Duplicate
       </Button>
       <Button type="button" variant="destructive" className="flex-1 rounded-full" onClick={onDelete}>
