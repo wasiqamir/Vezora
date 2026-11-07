@@ -342,9 +342,8 @@ export function ReconstructDialog({
         ? {
             ...source.reconstruction,
             keepShapes: mode === "shapes",
-            // Remove: fill punched holes so circle/letter edge rings do not ghost on the artboard.
-            // Word bands stay punched; live text is sized to the upload ink box.
-            keepEdgeOutlines: mode === "shapes" ? false : source.reconstruction.keepEdgeOutlines,
+            // Keep exact upload edges — "Remove" in the editor can still fill punched holes later.
+            keepEdgeOutlines: mode === "shapes" ? true : source.reconstruction.keepEdgeOutlines,
             note:
               mode === "image"
                 ? "Your exact upload is on the artboard as Logo. Edit that same image."

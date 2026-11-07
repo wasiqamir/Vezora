@@ -28,6 +28,8 @@ export async function buildReconstructionDraft(input: {
   assetId: string;
   jobId: string;
   recognize?: (image: Uint8Array) => Promise<TextHit[]>;
+  /** Cap OCR wait so guest/serverless drafts still return vector shapes. */
+  ocrTimeoutMs?: number;
 }): Promise<DraftResult> {
   const decoded = decodeRaster(input.bytes, input.mimeType);
   const fitted = fitRaster(decoded, 2048);
@@ -52,7 +54,18 @@ export async function buildReconstructionDraft(input: {
   let texts: ProjectObject[] = [];
   if (!recovered) {
     try {
-      const hits = input.recognize ? await input.recognize(encodePng(fitted.raster)) : await readText(fitted.raster);
+      const ocr = input.recognize
+        ? input.recognize(encodePng(fitted.raster))
+        : readText(fitted.raster);
+      const hits =
+        input.ocrTimeoutMs && input.ocrTimeoutMs > 0
+          ? await Promise.race([
+              ocr,
+              new Promise<TextHit[]>((resolve) => {
+                setTimeout(() => resolve([]), input.ocrTimeoutMs);
+              }),
+            ])
+          : await ocr;
       texts = hits.map((hit, index) => scaleObject(textObject(hit, index, textFill), layoutScale));
     } catch {
       texts = [];

@@ -51,14 +51,14 @@ export async function POST(request: Request) {
 
     const assetId = `guest_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
     const jobId = `guest_${assetId}`.slice(0, 80);
-    // Skip OCR on the guest path — Tesseract routinely times out on serverless and stuck the dialog.
-    // Vector tracing still builds editable shapes; live text can wait for a signed-in Edit elements pass.
+    // OCR is required so Edit elements can promote words to live text instead of letter-icon slices.
+    // Cap wait so a slow Tesseract load cannot hang the guest dialog forever.
     const draft = await buildReconstructionDraft({
       bytes,
       mimeType: file.type || "image/png",
       assetId,
       jobId,
-      recognize: async () => [],
+      ocrTimeoutMs: 18_000,
     });
 
     return Response.json({

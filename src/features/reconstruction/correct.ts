@@ -70,19 +70,14 @@ export function preferVectorOutlines(document: ProjectDocument): ProjectDocument
 }
 
 /**
- * Every mark piece becomes editable: letter outlines when they exist, otherwise live text.
- * Nothing useful is left locked or dropped.
+ * Every mark piece becomes editable: live OCR words for retype/restyle, unlock paths/marks.
+ * Letter outlines under a word stay hidden so Edit elements does not treat type as icon slices.
  */
 export function preferEditableElements(document: ProjectDocument): ProjectDocument {
-  let next = document;
-  for (const object of document.objects) {
-    if (object.type !== "text") continue;
-    const outlines = useVectorOutlines(next, object.id);
-    next = outlines.error ? useEditableText(next, object.id).document : outlines.document;
-  }
+  const withText = preferEditableText(document);
   return {
-    ...next,
-    objects: next.objects.map((object) =>
+    ...withText,
+    objects: withText.objects.map((object) =>
       object.name === "Original" && object.type === "image"
         ? object
         : { ...object, locked: false },
