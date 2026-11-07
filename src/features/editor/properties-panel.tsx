@@ -7,7 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PanelSelect } from "@/components/ui/panel-select";
 import { ColorInput } from "@/features/editor/color-input";
-import type { EditorFontOption, EditorTool, SelectionPatch, SelectionSnapshot } from "@/features/editor/types";
+import {
+  ORIGINAL_WORD_FONT_ID,
+  type EditorFontOption,
+  type EditorTool,
+  type SelectionPatch,
+  type SelectionSnapshot,
+} from "@/features/editor/types";
 
 const quiet =
   "rounded-full border-white/15 bg-white/[0.04] text-white hover:bg-white/10 hover:text-white";
@@ -113,8 +119,18 @@ export function PropertiesPanel({
             <p className="text-xs text-white/45">Locked. Unlock it in the layers list to move it.</p>
           ) : null}
 
-          {selection.type === "text" ? (
+          {selection.type === "text" || Boolean(selection.text?.trim()) ? (
             <div className="flex flex-col gap-3.5">
+              {selection.type === "image" || selection.fontId === ORIGINAL_WORD_FONT_ID ? (
+                <p className="text-xs leading-relaxed text-white/45">
+                  Original uses exact upload pixels. Pick any font to edit as live text — choose
+                  Original again to restore the pixels.
+                </p>
+              ) : selection.hasOriginalWord ? (
+                <p className="text-xs leading-relaxed text-white/45">
+                  Choose Original to restore the exact upload pixels for this word.
+                </p>
+              ) : null}
               <Field label="Text">
                 <textarea
                   value={selection.text ?? ""}
@@ -127,9 +143,13 @@ export function PropertiesPanel({
               <Field label="Font">
                 <PanelSelect
                   ariaLabel="Font"
-                  value={selection.fontId ?? "outfit"}
+                  value={
+                    selection.type === "image" && selection.text?.trim()
+                      ? ORIGINAL_WORD_FONT_ID
+                      : (selection.fontId ?? "outfit")
+                  }
                   onChange={(value) => onPatch({ fontId: value })}
-                  groups={fontGroups(fonts).map((group) => ({
+                  groups={fontGroupsForSelection(fonts, selection).map((group) => ({
                     category: group.category,
                     options: group.fonts.map((font) => ({ value: font.id, label: font.label })),
                   }))}
@@ -139,7 +159,7 @@ export function PropertiesPanel({
                 <NumberField
                   resetKey={`${selection.id}:size`}
                   label="Size"
-                  value={selection.fontSize ?? 72}
+                  value={selection.fontSize ?? Math.max(12, selection.height)}
                   min={8}
                   max={500}
                   live
@@ -320,6 +340,27 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       {children}
     </label>
   );
+}
+
+function fontGroupsForSelection(fonts: EditorFontOption[], selection: SelectionSnapshot) {
+  const groups = fontGroups(fonts);
+  if (!(selection.type === "image" && selection.text?.trim()) && !selection.hasOriginalWord) {
+    return groups;
+  }
+  return [
+    {
+      category: "Source",
+      fonts: [
+        {
+          id: ORIGINAL_WORD_FONT_ID,
+          label: "Original",
+          category: "Source",
+          canvasFamily: "Original",
+        },
+      ],
+    },
+    ...groups,
+  ];
 }
 
 function fontGroups(fonts: EditorFontOption[]) {

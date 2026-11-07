@@ -14,8 +14,10 @@ import {
 import {
   asExactEditablePieces,
   attachLiveText,
+  isWordImageSlice,
   mergePaths,
   preferEditableElements,
+  promoteWordSliceToLiveText,
   textLikeBands,
   useEditableText,
   useVectorOutlines,
@@ -425,7 +427,7 @@ export function ReconstructDialog({
               mode === "image"
                 ? "Your exact upload is on the artboard as Logo. Edit that same image."
                 : mode === "shapes"
-                  ? "Artboard matches your upload. Marks are movable slices; words are live text you can retype and restyle."
+                  ? "Artboard matches your upload pixel-for-pixel. Marks and words are movable slices of the exact image."
                   : source.reconstruction.note,
           }
         : source.reconstruction,
@@ -723,7 +725,11 @@ export function ReconstructDialog({
                   </div>
                   <ul className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto text-sm [scrollbar-width:thin]">
                     {draft.objects
-                      .filter((object) => object.type !== "image")
+                      .filter(
+                        (object) =>
+                          object.type !== "image" || isWordImageSlice(object),
+                      )
+                      .filter((object) => object.name !== "Logo" && object.name !== "Original")
                       .map((object) => (
                         <li
                           key={object.id}
@@ -748,23 +754,46 @@ export function ReconstructDialog({
                             <span className="font-medium">
                               {object.name}{" "}
                               <span className="font-normal text-white/45">
-                                {object.type === "text" ? "text" : "path"}
+                                {object.type === "text"
+                                  ? "text"
+                                  : isWordImageSlice(object)
+                                    ? "word"
+                                    : "path"}
                               </span>
                             </span>
-                            {object.type === "text" && object.confidence !== undefined ? (
+                            {(object.type === "text" || isWordImageSlice(object)) &&
+                            object.confidence !== undefined ? (
                               <span className="text-white/45">{object.confidence}%</span>
                             ) : null}
                             {!object.visible ? <span className="text-white/45">hidden</span> : null}
                           </span>
-                          {object.type === "text" ? (
+                          {object.type === "text" || isWordImageSlice(object) ? (
                             <TextRow
                               text={object.text ?? ""}
                               fontId={object.fontId ?? "outfit"}
                               fonts={fonts}
-                              onText={(text) => updateObject(object.id, { text, name: text.slice(0, 40) || object.name })}
+                              onText={(text) => {
+                                if (isWordImageSlice(object)) {
+                                  apply(promoteWordSliceToLiveText(draft, object.id, { text }));
+                                  return;
+                                }
+                                updateObject(object.id, { text, name: text.slice(0, 40) || object.name });
+                              }}
                               onFont={(fontId) => {
                                 const font = fonts.find((item) => item.id === fontId);
-                                updateObject(object.id, { fontId, fontFamily: font?.canvasFamily ?? "Outfit" });
+                                if (isWordImageSlice(object)) {
+                                  apply(
+                                    promoteWordSliceToLiveText(draft, object.id, {
+                                      fontId,
+                                      fontFamily: font?.canvasFamily ?? "Outfit",
+                                    }),
+                                  );
+                                  return;
+                                }
+                                updateObject(object.id, {
+                                  fontId,
+                                  fontFamily: font?.canvasFamily ?? "Outfit",
+                                });
                               }}
                             />
                           ) : null}
@@ -954,6 +983,8 @@ function CompareView({
   const markup = templatePreviewSvg(shapes);
   const width = original ? ((original.width * original.scaleX) / document.artboard.width) * 100 : 100;
   const height = original ? ((original.height * original.scaleY) / document.artboard.height) * 100 : 100;
+  // Draft uses the exact upload pixels (same as Original). Overlay adds traced shapes on top.
+  const showShapes = view === "overlay";
   return (
     <div
       className={cn(
@@ -962,20 +993,20 @@ function CompareView({
       )}
       style={{ aspectRatio: `${document.artboard.width} / ${document.artboard.height}` }}
     >
-      {view !== "draft" && original?.assetId ? (
+      {original?.assetId ? (
         // The reconstruction upload is served only to the signed-in owner.
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          alt="Original upload"
+          alt={view === "draft" ? "Draft from original upload" : "Original upload"}
           src={uploadSrc(original.assetId)}
           className="absolute top-0 left-0 max-w-none"
           style={{ width: `${width}%`, height: `${height}%` }}
         />
       ) : null}
-      {view !== "original" ? (
+      {showShapes ? (
         <div
           className="absolute inset-0"
-          style={{ opacity: view === "overlay" ? 0.85 : 1 }}
+          style={{ opacity: 0.85 }}
           dangerouslySetInnerHTML={{ __html: markup }}
         />
       ) : null}

@@ -78,6 +78,18 @@ const projectObjectSchema = z.object({
   iconId: z.string().max(80).optional(),
   assetId: z.string().max(80).optional(),
   confidence: z.number().min(0).max(100).optional(),
+  /** Backup of the upload crop after a word slice was promoted to live text. */
+  wordSlice: z
+    .object({
+      assetId: z.string().min(1).max(80),
+      clipPath: z.string().min(1).max(200000),
+      clipRule: z.enum(["evenodd", "nonzero"]).optional(),
+      text: z.string().min(1).max(500),
+      confidence: z.number().min(0).max(100).optional(),
+      width: z.number().positive(),
+      height: z.number().positive(),
+    })
+    .optional(),
 });
 
 export const projectDocumentSchema = z.object({
@@ -277,6 +289,8 @@ function sceneObjectFromProject(object: ProjectObject): SceneObject {
       ...(object.fontId ? { fontId: object.fontId } : {}),
       ...(object.assetId ? { assetId: object.assetId } : {}),
       ...(object.confidence !== undefined ? { confidence: object.confidence } : {}),
+      ...(object.type === "image" && object.text?.trim() ? { text: object.text.trim() } : {}),
+      ...(object.wordSlice ? { wordSlice: object.wordSlice } : {}),
       ...(object.type === "image" && object.path ? { clipPath: object.path } : {}),
       ...(object.type === "image" && object.fillRule ? { clipRule: object.fillRule } : {}),
       ...(object.clipInvert ? { clipInvert: true } : {}),
@@ -345,7 +359,9 @@ function projectObjectFromScene(object: SceneObject): ProjectObject {
     strokeWidth: object.strokeWidth,
     ...(object.flipX ? { flipX: true } : {}),
     ...(object.flipY ? { flipY: true } : {}),
-    ...(object.text !== undefined ? { text: object.text } : {}),
+    ...(object.text !== undefined || object.data.text
+      ? { text: object.text ?? object.data.text }
+      : {}),
     ...(object.fontFamily ? { fontFamily: object.fontFamily } : {}),
     ...(object.data.fontId ? { fontId: object.data.fontId } : {}),
     ...(object.fontSize !== undefined ? { fontSize: object.fontSize } : {}),
@@ -374,6 +390,7 @@ function projectObjectFromScene(object: SceneObject): ProjectObject {
     ...(object.data.confidence !== undefined
       ? { confidence: Math.max(0, Math.min(100, Math.round(object.data.confidence))) }
       : {}),
+    ...(object.data.wordSlice ? { wordSlice: object.data.wordSlice } : {}),
   };
 }
 

@@ -274,11 +274,114 @@ export function textLikeBands(document: ProjectDocument) {
     .map(({ x, y, width, height }) => ({ x, y, width, height }));
 }
 
+/** Pixel-identical word piece cut from the upload (has OCR `text`, not the Logo plate). */
+export function isWordImageSlice(object: ProjectObject) {
+  return (
+    object.type === "image" &&
+    object.name !== "Logo" &&
+    object.name !== "Original" &&
+    Boolean(object.text?.trim())
+  );
+}
+
 /**
- * Exact upload as Logo (with holes) + clipped pieces for marks + live OCR words.
- * Letter outlines under a detected word become one editable text object (font/size/color).
+ * Retype / restyle a word: image slices become live text (only that word loses pixel identity).
+ * Already-live text objects are patched in place.
+ */
+export function promoteWordSliceToLiveText(
+  document: ProjectDocument,
+  objectId: string,
+  patch: {
+    text?: string;
+    fontId?: string;
+    fontFamily?: string;
+    fontSize?: number;
+    fontWeight?: number;
+    fill?: string;
+  } = {},
+): Correction {
+  const object = document.objects.find((item) => item.id === objectId);
+  if (!object) return { document, error: "That word was not found." };
+
+  if (object.type === "text") {
+    const label = patch.text !== undefined ? patch.text : (object.text ?? "");
+    return {
+      error: null,
+      document: {
+        ...document,
+        objects: document.objects.map((item) =>
+          item.id !== objectId
+            ? item
+            : {
+                ...item,
+                ...(patch.text !== undefined
+                  ? { text: label, name: label.trim().slice(0, 40) || item.name }
+                  : {}),
+                ...(patch.fontId !== undefined ? { fontId: patch.fontId } : {}),
+                ...(patch.fontFamily !== undefined ? { fontFamily: patch.fontFamily } : {}),
+                ...(patch.fontSize !== undefined ? { fontSize: patch.fontSize } : {}),
+                ...(patch.fontWeight !== undefined ? { fontWeight: patch.fontWeight } : {}),
+                ...(patch.fill !== undefined ? { fill: patch.fill } : {}),
+              },
+        ),
+      },
+    };
+  }
+
+  if (!isWordImageSlice(object)) {
+    return { document, error: "Only word slices can become editable text." };
+  }
+
+  const label = (patch.text ?? object.text ?? object.name).trim();
+  if (!label) return { document, error: "That word has no text to edit." };
+
+  const boxWidth = Math.max(8, Math.abs(object.width * object.scaleX));
+  const boxHeight = Math.max(8, Math.abs(object.height * object.scaleY));
+  const inkRatio = 0.75;
+  const fontSize =
+    patch.fontSize ?? Math.max(12, Math.min(220, Math.round(boxHeight / inkRatio)));
+  const live: ProjectObject = {
+    id: object.id,
+    type: "text",
+    name: label.slice(0, 40),
+    text: label,
+    x: object.x,
+    y: object.y,
+    width: Math.max(24, Math.round(boxWidth)),
+    height: Math.max(8, Math.round(Math.max(boxHeight, fontSize * inkRatio))),
+    scaleX: 1,
+    scaleY: 1,
+    angle: object.angle,
+    opacity: object.opacity,
+    visible: true,
+    locked: false,
+    fill: patch.fill ?? contrastText(document.artboard.background),
+    fontSize,
+    fontId: patch.fontId ?? "outfit",
+    fontFamily: patch.fontFamily ?? "Outfit",
+    fontWeight: patch.fontWeight ?? 500,
+    letterSpacing: 0,
+    lineHeight: 1.16,
+    textAlign: "left",
+    ...(object.confidence !== undefined ? { confidence: object.confidence } : {}),
+  };
+
+  return {
+    error: null,
+    document: {
+      ...document,
+      objects: document.objects.map((item) => (item.id === objectId ? live : item)),
+    },
+  };
+}
+
+/**
+ * Exact upload as Logo (with holes) + clipped pieces for marks and words.
+ * Word bands become one image slice each from the upload — pixel-identical, movable as a unit.
+ * Letter outlines under a word are not kept as separate slices (the word band carries them).
  * Full-board plates are skipped — Logo carries that exact content (and anything tracer missed).
  * Pieces do not punch each other; only Logo is punched, so moving a piece leaves a clean hole.
+ * Retype or change font later via promoteWordSliceToLiveText — only that word becomes live text.
  */
 export function asExactEditablePieces(
   document: ProjectDocument,
@@ -299,8 +402,7 @@ export function asExactEditablePieces(
   const words = document.objects.filter(
     (object) => object.type === "text" && Boolean(object.text?.trim()),
   );
-  // Paths under a word are letters / letter rings — never keep them as image slices.
-  // Band-aligned live text (attachLiveText) makes this overlap reliable for BLOOM / ATELIER.
+  // Paths under a word are letters — fold into the word-band image slice instead.
   const letterPathIds = new Set<string>();
   for (const word of words) {
     for (const id of overlappingPathIds(document, word, wordPad(word))) letterPathIds.add(id);
@@ -309,7 +411,7 @@ export function asExactEditablePieces(
   const paths: ProjectObject[] = [];
   for (const object of document.objects) {
     if (object.type !== "path" || !object.path) continue;
-    // Include hidden letter outlines so Logo still gets holes under live words.
+    // Include hidden letter outlines so word-band holes still clear Logo under the slice.
     if (object.visible === false && !letterPathIds.has(object.id)) continue;
     const width = Math.abs(object.width * object.scaleX);
     const height = Math.abs(object.height * object.scaleY);
@@ -358,14 +460,36 @@ export function asExactEditablePieces(
     };
   });
 
-  // Size live words first so word-band punches cover the real em box (not just the OCR ink).
-  const texts = words.map((word) => editableWordFromLetters(document, word, document.artboard.background));
+  // One exact-pixel slice per detected word (BLOOM / ATELIER) — not a substituted font.
+  const wordPieces = words.map((word) => {
+    const box = bounds(word);
+    const label = (word.text ?? word.name).trim().slice(0, 40) || "Word";
+    return {
+      id: word.id,
+      type: "image" as const,
+      name: label,
+      x: box.x,
+      y: box.y,
+      width: Math.max(1, box.width),
+      height: Math.max(1, box.height),
+      scaleX: 1,
+      scaleY: 1,
+      angle: upload.angle,
+      opacity: 1,
+      visible: true,
+      locked: false,
+      assetId,
+      path: rectPath(box),
+      fillRule: "nonzero" as const,
+      text: word.text,
+      confidence: word.confidence,
+    };
+  });
 
-  // Punch mark pieces out of Logo. Punch clean padded word rects (not letter outlines) so live
-  // text sits on a flat hole — letter-shaped subtracts leave thick fringe under Bodoni/Outfit.
+  // Punch mark + word slices out of Logo so moving a piece leaves a clean hole (no ghost).
   const holePaths = [
     ...markPaths.map((object) => object.path).filter((value): value is string => Boolean(value)),
-    ...texts.map((word) => rectPath(paddedBounds(word, textBandPad(word)))),
+    ...wordPieces.map((word) => word.path),
   ];
   let clipSubtract: string | undefined;
   if (holePaths.length > 0) {
@@ -385,8 +509,7 @@ export function asExactEditablePieces(
     scaleY: 1,
     angle: upload.angle,
     opacity: 1,
-    // Keep the exact upload plate visible so the artboard matches Original; holes under
-    // pieces + live words remove ghosts without dropping the dark mark board.
+    // Exact upload plate; holes under pieces keep the board pixel-identical until a part moves.
     visible: true,
     // Lock the plate so clicks hit the movable pieces on top; unlock in Layers if needed.
     locked: true,
@@ -399,97 +522,9 @@ export function asExactEditablePieces(
 
   return {
     ...document,
-    // Logo at the back; mark slices + live words on top — no letter ghosts.
-    objects: [logo, ...pieces, ...texts],
+    // Logo at the back; mark + word slices on top — all from the same upload pixels.
+    objects: [logo, ...pieces, ...wordPieces],
   };
-}
-
-/**
- * Promote an OCR word to editable text sized to the upload's ink box.
- * OCR fontSize alone is often too small — fit em size + tracking to the detected bounds.
- */
-function editableWordFromLetters(
-  document: ProjectDocument,
-  word: ProjectObject,
-  background: string | null,
-): ProjectObject {
-  const label = (word.text ?? "").trim();
-  const boxHeight = Math.max(8, Math.abs(word.height * word.scaleY));
-  const boxWidth = Math.max(8, Math.abs(word.width * word.scaleX));
-  // Short display words → Didot-like serif; longer/smaller lines → spaced sans tagline.
-  const tagline =
-    label.length >= 6 && boxHeight <= Math.max(48, Math.round(document.artboard.height * 0.06));
-  // Capitals fill ~75% of the em (serif) / ~72% (sans). Size the em to the ink box height.
-  const inkRatio = tagline ? 0.72 : 0.75;
-  const fontSize = Math.max(12, Math.min(220, Math.round(boxHeight / inkRatio)));
-  // Average uppercase advance (no tracking) — then solve tracking so the word spans boxWidth.
-  const avgChar = tagline ? 0.62 : 0.76;
-  const gaps = Math.max(1, label.length - 1);
-  const baseWidth = label.length * fontSize * avgChar;
-  const rawTracking = ((boxWidth - baseWidth) / gaps / fontSize) * 1000;
-  const letterSpacing = Math.round(
-    Math.max(tagline ? 120 : 0, Math.min(tagline ? 900 : 180, rawTracking)),
-  );
-  const width = Math.max(24, Math.round(boxWidth));
-  const height = Math.max(8, Math.round(Math.max(boxHeight, fontSize * inkRatio)));
-  // Prefer traced letter fills (e.g. orange tagline) when they stay readable on the board.
-  const letterIds = overlappingPathIds(document, word, wordPad(word));
-  const letterFills = document.objects
-    .filter((object) => object.type === "path" && letterIds.has(object.id))
-    .map((object) => object.fill)
-    .filter((value): value is string => typeof value === "string");
-  return {
-    ...word,
-    type: "text",
-    visible: true,
-    locked: false,
-    opacity: 1,
-    fill: pickReadableFill(letterFills, word.fill, background),
-    fontSize,
-    width,
-    height,
-    scaleX: 1,
-    scaleY: 1,
-    fontId: tagline ? "outfit" : "bodoni-moda",
-    fontFamily: tagline ? "Outfit" : "Bodoni Moda",
-    fontWeight: tagline ? 500 : 700,
-    letterSpacing,
-  };
-}
-
-/** Prefer a letter fill that stays readable on the artboard; fall back to white/black. */
-function pickReadableFill(
-  letterFills: string[],
-  wordFill: string | null | undefined,
-  background: string | null,
-): string {
-  const readable = (color: string) => contrastAgainst(color, background) >= 0.28;
-  const bestLetter = bestContrast(letterFills, background);
-  if (bestLetter && readable(bestLetter)) return bestLetter;
-  if (typeof wordFill === "string" && /^#[0-9a-fA-F]{6}$/.test(wordFill) && readable(wordFill)) {
-    return wordFill;
-  }
-  return bestContrast(["#ffffff", "#171717"], background) ?? "#ffffff";
-}
-
-function bestContrast(colors: string[], background: string | null) {
-  let best: string | null = null;
-  let bestScore = -1;
-  for (const color of colors) {
-    if (!/^#[0-9a-fA-F]{6}$/.test(color)) continue;
-    const score = contrastAgainst(color, background);
-    if (score > bestScore) {
-      bestScore = score;
-      best = color;
-    }
-  }
-  return best;
-}
-
-function contrastAgainst(color: string, background: string | null) {
-  const fg = luma(color);
-  const bg = background && /^#[0-9a-fA-F]{6}$/.test(background) ? luma(background) : 0.08;
-  return Math.abs(fg - bg);
 }
 
 function luma(hex: string) {
@@ -562,13 +597,6 @@ function overlappingPathIds(document: ProjectDocument, text: ProjectObject, pad 
 /** Modest pad when deciding which paths are letters under a word (avoid swallowing nearby marks). */
 function wordPad(word: ProjectObject) {
   return Math.max(16, Math.round(Math.abs(word.height * word.scaleY) * 0.35));
-}
-
-/** Generous pad for Logo punches under fitted live text (em box is taller than OCR ink). */
-function textBandPad(word: ProjectObject) {
-  const boxHeight = Math.max(8, Math.abs(word.height * word.scaleY));
-  const fontSize = Math.max(boxHeight, word.fontSize ?? boxHeight);
-  return Math.max(36, Math.round(fontSize * 0.55));
 }
 
 function paddedBounds(object: ProjectObject, pad: number) {

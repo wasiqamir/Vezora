@@ -11,6 +11,19 @@ export type LogoObjectType =
 
 export type EditorTool = "select" | "pen" | "nodes";
 
+/** Style font id for a pixel-identical word slice (not a real typeface). */
+export const ORIGINAL_WORD_FONT_ID = "original-pixels";
+
+export type WordSliceBackup = {
+  assetId: string;
+  clipPath: string;
+  clipRule?: "evenodd" | "nonzero";
+  text: string;
+  confidence?: number;
+  width: number;
+  height: number;
+};
+
 export type LogoObjectData = {
   id: string;
   type: LogoObjectType;
@@ -19,6 +32,10 @@ export type LogoObjectData = {
   fontId?: string;
   assetId?: string;
   confidence?: number;
+  /** OCR label on a pixel-identical word image slice (promotes to live text on retype/font). */
+  text?: string;
+  /** Saved upload crop so Style can return from a live font to exact pixels. */
+  wordSlice?: WordSliceBackup;
   /** SVG path used to clip an upload image into an editable piece. */
   clipPath?: string;
   clipRule?: "evenodd" | "nonzero";
@@ -65,6 +82,8 @@ export type SelectionSnapshot = {
   fontId?: string;
   fontSize?: number;
   fontWeight?: number;
+  /** True when this word can switch back to exact upload pixels. */
+  hasOriginalWord?: boolean;
   onPath?: boolean;
   pathStartOffset?: number;
 };

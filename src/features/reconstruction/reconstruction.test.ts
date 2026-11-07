@@ -6,10 +6,12 @@ import { templatePreviewSvg } from "../templates/preview.ts";
 import {
   asExactEditablePieces,
   attachLiveText,
+  isWordImageSlice,
   mergePaths,
   preferEditableElements,
   preferEditableText,
   preferVectorOutlines,
+  promoteWordSliceToLiveText,
   textLikeBands,
   useEditableText,
   useVectorOutlines,
@@ -213,14 +215,59 @@ describe("reconstruction correction", () => {
     assert.equal(petal?.scaleX, 1);
     assert.equal(petal?.locked, false);
     assert.equal(pieces.objects.some((item) => item.name === "Original"), false);
-    // Detected words become live text (font/size/color), not per-letter slices.
-    const word = pieces.objects.find((item) => item.type === "text");
+    // Detected words become exact image slices from the upload, not substituted fonts.
+    const word = pieces.objects.find((item) => item.name === "ATELIER");
+    assert.equal(word?.type, "image");
+    assert.equal(word?.assetId, "asset_bloom");
     assert.equal(word?.text, "ATELIER");
     assert.equal(word?.visible, true);
     assert.equal(word?.locked, false);
   });
 
-  it("turns letter outlines under a word into one editable text object", () => {
+  it("promotes a word image slice to live text only when retyped or restyled", () => {
+    const upload = object("image", "Original", {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      scaleX: 1,
+      scaleY: 1,
+      assetId: "asset_bloom",
+      locked: true,
+    });
+    const withWord: ProjectDocument = {
+      ...document,
+      objects: [
+        upload,
+        object("text", "BLOOM", {
+          x: 8,
+          y: 78,
+          width: 90,
+          height: 40,
+          text: "BLOOM",
+          fill: "#f5f5f5",
+        }),
+      ],
+    };
+    const pieces = asExactEditablePieces(withWord, upload);
+    const slice = pieces.objects.find((item) => item.name === "BLOOM");
+    assert.equal(isWordImageSlice(slice!), true);
+    const promoted = promoteWordSliceToLiveText(pieces, slice!.id, {
+      text: "BLOOM CO",
+      fontId: "bodoni-moda",
+      fontFamily: "Bodoni Moda",
+    });
+    assert.equal(promoted.error, null);
+    const live = promoted.document.objects.find((item) => item.id === slice!.id);
+    assert.equal(live?.type, "text");
+    assert.equal(live?.text, "BLOOM CO");
+    assert.equal(live?.fontId, "bodoni-moda");
+    assert.equal(live?.fontFamily, "Bodoni Moda");
+    // Marks / logo plate stay image slices — only the edited word becomes live text.
+    assert.equal(promoted.document.objects.find((item) => item.name === "Logo")?.type, "image");
+  });
+
+  it("turns letter outlines under a word into one exact image slice", () => {
     const upload = object("image", "Original", {
       x: 0,
       y: 0,
@@ -275,25 +322,26 @@ describe("reconstruction correction", () => {
     const logo = pieces.objects.find((item) => item.name === "Logo");
     const petal = pieces.objects.find((item) => item.name === "Petal");
     const letterSlice = pieces.objects.find((item) => item.name === "B" || item.name === "L");
-    const word = pieces.objects.find((item) => item.type === "text");
+    const word = pieces.objects.find((item) => item.name === "BLOOM");
     assert.equal(petal?.type, "image");
     assert.equal(letterSlice, undefined);
+    assert.equal(word?.type, "image");
+    assert.equal(word?.assetId, "asset_bloom");
     assert.equal(word?.text, "BLOOM");
-    // Live text picks a readable letter fill (near-white ink on the dark board).
-    assert.equal(word?.fill, "#f5f5f5");
-    assert.equal(word?.fontId, "bodoni-moda");
-    // Em size tracks the OCR ink box so live text matches the upload scale.
-    assert.equal(word?.fontSize, 53);
+    assert.equal(word?.x, 8);
+    assert.equal(word?.y, 78);
+    assert.equal(word?.width, 90);
+    assert.equal(word?.height, 40);
     assert.equal(word?.visible, true);
     assert.equal(word?.locked, false);
     // Logo stays visible so the artboard matches Original; holes clear letter ghosts.
     assert.equal(logo?.visible, true);
     assert.match(logo?.clipSubtract ?? "", /M 10 10 H 50 V 50 H 10 Z/);
-    // Letter outlines are not punched as shapes — a clean word-band rect clears them.
+    // Letter outlines are not punched as shapes — the word-band rect clears them.
     assert.doesNotMatch(logo?.clipSubtract ?? "", /M 8 80 H 26 V 116 H 8 Z/);
     assert.doesNotMatch(logo?.clipSubtract ?? "", /M 28 80 H 44 V 116 H 28 Z/);
-    // Word band is punched out so no pixel letter ghosts sit under the live text.
-    assert.match(logo?.clipSubtract ?? "", /M -28 42 H 134 V 154 H -28 Z/);
+    // Exact word band is punched so Logo + word slice stay pixel-identical.
+    assert.match(logo?.clipSubtract ?? "", /M 8 78 H 98 V 118 H 8 Z/);
   });
 
   it("punches piece holes out of Logo and skips full-board plates", () => {
@@ -450,11 +498,13 @@ describe("reconstruction correction", () => {
         assetId: "asset_volt",
       }),
     );
-    assert.equal(pieces.objects.find((item) => item.type === "text")?.text, "VOLT");
-    assert.equal(pieces.objects.find((item) => item.type === "text")?.fontSize !== undefined, true);
+    const wordSlice = pieces.objects.find((item) => item.name === "VOLT");
+    assert.equal(wordSlice?.type, "image");
+    assert.equal(wordSlice?.assetId, "asset_volt");
+    assert.equal(wordSlice?.text, "VOLT");
   });
 
-  it("places each OCR word on its letter-row band so Style can edit the full word", () => {
+  it("places each OCR word on its letter-row band as one exact image slice", () => {
     const base: ProjectDocument = {
       ...document,
       artboard: { ...document.artboard, width: 1000, height: 1000, background: "#1A1028" },
@@ -509,9 +559,15 @@ describe("reconstruction correction", () => {
         assetId: "asset_bloom",
       }),
     );
-    assert.equal(pieces.objects.find((item) => item.type === "text")?.text, "BLOOM");
+    const wordSlice = pieces.objects.find((item) => item.name === "BLOOM");
+    assert.equal(wordSlice?.type, "image");
+    assert.equal(wordSlice?.assetId, "asset_bloom");
+    assert.equal(wordSlice?.x, 250);
+    assert.equal(wordSlice?.y, 520);
+    assert.equal(wordSlice?.width, 140);
+    assert.equal(wordSlice?.height, 70);
     assert.equal(
-      pieces.objects.some((item) => item.type === "image" && item.name !== "Logo"),
+      pieces.objects.some((item) => item.type === "image" && item.name !== "Logo" && item.name !== "BLOOM"),
       false,
     );
   });

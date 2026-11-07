@@ -67,15 +67,17 @@ import {
 } from "@/features/projects/document";
 import { pathBounds } from "@/features/reconstruction/paths";
 import type { SceneDocument, SceneObject } from "@/features/editor/scene";
-import type {
-  ArtboardPresetId,
-  EditorFontOption,
-  EditorSnapshot,
-  EditorTool,
-  LogoObjectData,
-  LogoObjectType,
-  SelectionPatch,
-  SelectionSnapshot,
+import {
+  ORIGINAL_WORD_FONT_ID,
+  type ArtboardPresetId,
+  type EditorFontOption,
+  type EditorSnapshot,
+  type EditorTool,
+  type LogoObjectData,
+  type LogoObjectType,
+  type SelectionPatch,
+  type SelectionSnapshot,
+  type WordSliceBackup,
 } from "@/features/editor/types";
 
 const MIN_ZOOM = 0.1;
@@ -751,15 +753,41 @@ export class CanvasController {
     const data = this.data.get(object);
     if (!data) return;
 
+    // Pixel word ↔ live font: Original restores upload crop; any other font promotes.
+    if (patch.fontId === ORIGINAL_WORD_FONT_ID) {
+      if (data.type === "text" && data.wordSlice) {
+        void this.restoreWordImageFromText(object);
+        return;
+      }
+      if (data.type === "image" && data.text?.trim()) return;
+    }
+    if (
+      data.type === "image" &&
+      typeof data.text === "string" &&
+      data.text.trim() &&
+      (patch.text !== undefined ||
+        (patch.fontId !== undefined && patch.fontId !== ORIGINAL_WORD_FONT_ID) ||
+        patch.fontSize !== undefined ||
+        patch.fontWeight !== undefined)
+    ) {
+      void this.promoteWordImageToText(object, patch);
+      return;
+    }
+
     const locked = object.lockMovementX === true;
     if (patch.name !== undefined && patch.name.trim()) data.name = patch.name;
     if (patch.text !== undefined && object instanceof IText) object.set("text", patch.text);
-    if (patch.fontId !== undefined && object instanceof IText) {
+    if (patch.fontId !== undefined && object instanceof IText && patch.fontId !== ORIGINAL_WORD_FONT_ID) {
       data.fontId = patch.fontId;
-      object.set("fontFamily", this.canvasFamily(patch.fontId));
+      object.set({
+        fontFamily: this.canvasFamily(patch.fontId),
+        // Drop any stretch left from an older promote so the new face paints at true metrics.
+        scaleX: 1,
+        scaleY: 1,
+      });
     }
     if (patch.fontSize !== undefined && object instanceof IText) {
-      object.set("fontSize", clamp(Math.round(patch.fontSize), 8, 500));
+      object.set({ fontSize: clamp(Math.round(patch.fontSize), 8, 500), scaleX: 1, scaleY: 1 });
     }
     if (patch.fontWeight !== undefined && object instanceof IText) {
       object.set("fontWeight", patch.fontWeight);
@@ -769,8 +797,12 @@ export class CanvasController {
     }
     if (
       object instanceof IText &&
-      (patch.fontId !== undefined || patch.fontWeight !== undefined)
+      (patch.fontId !== undefined ||
+        patch.fontWeight !== undefined ||
+        patch.fontSize !== undefined ||
+        patch.text !== undefined)
     ) {
+      object.initDimensions();
       this.paintFont(object);
     }
     if (
@@ -1244,6 +1276,181 @@ export class CanvasController {
     return count === 1 ? label : `${label} ${count}`;
   }
 
+  /**
+   * Swap a pixel-identical word image slice for live text when the user retypes or restyles it.
+   * Keeps a wordSlice backup so Style → Original can restore exact upload pixels.
+   */
+  private async promoteWordImageToText(object: FabricObject, patch: SelectionPatch) {
+    const data = this.data.get(object);
+    if (!data || data.type !== "image" || this.isUploadImage(object)) return;
+    const sourceLabel = (data.text ?? "").trim();
+    if (!sourceLabel) return;
+    const assetId = data.assetId;
+    const clipPath = data.clipPath;
+    if (!assetId || !clipPath) return;
+
+    const label = (patch.text ?? sourceLabel).trim() || sourceLabel;
+    const topLeft = object.getPositionByOrigin("left", "top");
+    const boxWidth = Math.max(8, object.getScaledWidth());
+    const boxHeight = Math.max(8, object.getScaledHeight());
+    const fontId =
+      patch.fontId && patch.fontId !== ORIGINAL_WORD_FONT_ID
+        ? patch.fontId
+        : this.fonts.some((font) => font.id === DEFAULT_FONT_ID)
+          ? DEFAULT_FONT_ID
+          : (this.fonts[0]?.id ?? DEFAULT_FONT_ID);
+    const family = this.canvasFamily(fontId);
+    const fontWeight = patch.fontWeight ?? 500;
+    const inkRatio = 0.75;
+    const fontSize =
+      patch.fontSize ?? Math.max(12, Math.min(220, Math.round(boxHeight / inkRatio)));
+    const sampled =
+      object instanceof FabricImage ? this.sampleImagePieceColor(object, 200) : null;
+    const fill = patch.fill ?? sampled ?? this.contrastInk();
+
+    const wordSlice: WordSliceBackup = {
+      assetId,
+      clipPath,
+      ...(data.clipRule ? { clipRule: data.clipRule } : {}),
+      text: sourceLabel,
+      ...(data.confidence !== undefined ? { confidence: data.confidence } : {}),
+      width: boxWidth,
+      height: boxHeight,
+    };
+
+    const created = createTextObject({
+      id: data.id,
+      name: label.slice(0, 40),
+      canvasFamily: family,
+      fontId,
+    });
+    const text = created.object;
+    text.set({
+      text: label,
+      fontSize,
+      fontWeight,
+      fontFamily: family,
+      fill,
+      angle: object.angle ?? 0,
+      opacity: object.opacity ?? 1,
+      scaleX: 1,
+      scaleY: 1,
+    });
+    text.initDimensions();
+    text.positionByLeftTop(new Point(topLeft.x, topLeft.y));
+
+    this.data.delete(object);
+    this.canvas.remove(object);
+    this.data.set(text, {
+      ...created.data,
+      wordSlice,
+      ...(data.confidence !== undefined ? { confidence: data.confidence } : {}),
+    });
+    styleLogoObject(text);
+    this.applyInteraction(text, true, false);
+    this.canvas.add(text);
+    this.canvas.sendObjectToBack(this.artboard);
+    this.canvas.setActiveObject(text);
+    this.commit();
+
+    try {
+      await document.fonts.load(`${fontWeight} ${fontSize}px "${family}"`);
+      await document.fonts.ready;
+    } catch {
+      // paintFont still retries.
+    }
+    if (this.canvas.destroyed || this.data.get(text)?.id !== data.id) return;
+    if (this.data.get(text)?.fontId !== fontId) return;
+    text.set({ fontFamily: family, dirty: true });
+    text.initDimensions();
+    text.setCoords();
+    this.paintFont(text);
+    this.canvas.requestRenderAll();
+    this.emit();
+  }
+
+  /** Restore exact upload pixels from the wordSlice backup (Style → Original). */
+  private async restoreWordImageFromText(object: FabricObject) {
+    const data = this.data.get(object);
+    const slice = data?.wordSlice;
+    if (!data || data.type !== "text" || !slice) return;
+
+    const topLeft = object.getPositionByOrigin("left", "top");
+    const angle = object.angle ?? 0;
+    const opacity = object.opacity ?? 1;
+    const pieceWidth = Math.max(1, slice.width);
+    const pieceHeight = Math.max(1, slice.height);
+    const fullWidth = Math.max(pieceWidth, this.artboard.width || pieceWidth);
+    const fullHeight = Math.max(pieceHeight, this.artboard.height || pieceHeight);
+    const box = pathBounds(slice.clipPath);
+    const cropX = box?.x ?? topLeft.x;
+    const cropY = box?.y ?? topLeft.y;
+
+    const loaded = await this.loadClippedUpload({
+      assetId: slice.assetId,
+      pathD: slice.clipPath,
+      fillRule: slice.clipRule === "evenodd" ? "evenodd" : "nonzero",
+      fullWidth,
+      fullHeight,
+      pieceX: cropX,
+      pieceY: cropY,
+      pieceWidth: box ? Math.max(1, box.width) : pieceWidth,
+      pieceHeight: box ? Math.max(1, box.height) : pieceHeight,
+      invert: false,
+      expandClipPx: 0,
+    });
+    if (this.canvas.destroyed || !this.data.has(object)) return;
+    if (!loaded) {
+      this.fail("Could not restore the original word pixels.");
+      return;
+    }
+
+    const width = box ? Math.max(1, box.width) : pieceWidth;
+    const height = box ? Math.max(1, box.height) : pieceHeight;
+    loaded.set({
+      originX: "left",
+      originY: "top",
+      perPixelTargetFind: true,
+      fill: "",
+      angle,
+      opacity,
+      scaleX: width / Math.max(1, loaded.width || width),
+      scaleY: height / Math.max(1, loaded.height || height),
+    });
+    loaded.positionByLeftTop(new Point(topLeft.x, topLeft.y));
+
+    const nextData: LogoObjectData = {
+      id: data.id,
+      type: "image",
+      name: (slice.text || data.name).slice(0, 40),
+      assetId: slice.assetId,
+      text: slice.text,
+      clipPath: slice.clipPath,
+      ...(slice.clipRule ? { clipRule: slice.clipRule } : {}),
+      ...(slice.confidence !== undefined ? { confidence: slice.confidence } : {}),
+    };
+
+    this.data.delete(object);
+    this.canvas.remove(object);
+    this.data.set(loaded, nextData);
+    this.cacheImagePieceBase(loaded);
+    styleLogoObject(loaded);
+    this.applyInteraction(loaded, true, false);
+    this.canvas.add(loaded);
+    this.canvas.sendObjectToBack(this.artboard);
+    this.canvas.setActiveObject(loaded);
+    this.commit();
+  }
+
+  private contrastInk() {
+    const background = this.background;
+    if (!background || !/^#[0-9a-fA-F]{6}$/.test(background)) return "#171717";
+    const rgb = hexToRgb(background);
+    if (!rgb) return "#171717";
+    const luma = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+    return luma < 0.55 ? "#ffffff" : "#171717";
+  }
+
   private paintFont(object: IText) {
     const primary = String(object.fontFamily ?? "")
       .split(",")[0]
@@ -1256,9 +1463,10 @@ export class CanvasController {
       .load(`${weight} ${size}px "${primary}"`)
       .then(() => {
         if (this.canvas.destroyed) return;
+        // Re-apply family after load so Fabric drops any system fallback face.
+        object.set({ fontFamily: primary, dirty: true });
         if (object.path) object.setPathInfo();
         object.initDimensions();
-        object.set({ dirty: true });
         object.setCoords();
         this.canvas.requestRenderAll();
         this.emit();
@@ -1303,7 +1511,7 @@ export class CanvasController {
   }
 
   /** Average opaque pixel color from the untinted piece bitmap (for the Style swatch). */
-  private sampleImagePieceColor(object: FabricImage): string | null {
+  private sampleImagePieceColor(object: FabricImage, minAlpha = 32): string | null {
     this.cacheImagePieceBase(object);
     const base = this.imagePieceBases.get(object);
     if (!base) return null;
@@ -1318,7 +1526,7 @@ export class CanvasController {
     const stride = Math.max(1, Math.floor((base.width * base.height) / 4000)) * 4;
     for (let index = 0; index < data.length; index += stride) {
       const alpha = data[index + 3];
-      if (alpha < 32) continue;
+      if (alpha < minAlpha) continue;
       const a = alpha / 255;
       totalR += data[index] * a;
       totalG += data[index + 1] * a;
@@ -1464,11 +1672,17 @@ export class CanvasController {
       stroke: hexColor(fillSource.stroke),
       strokeWidth: Math.round(fillSource.strokeWidth ?? 0),
       cornerRadius: object instanceof Rect ? Math.round(object.rx ?? 0) : undefined,
-      text: object instanceof IText ? object.text : undefined,
-      fontId: data?.fontId,
+      text: object instanceof IText ? object.text : data?.text,
+      fontId:
+        data?.type === "image" && data.text?.trim()
+          ? ORIGINAL_WORD_FONT_ID
+          : data?.fontId,
       fontSize: object instanceof IText ? Math.round(object.fontSize ?? 72) : undefined,
       fontWeight:
         typeof weight === "number" ? weight : weight === "bold" ? 700 : weight ? 400 : undefined,
+      hasOriginalWord: Boolean(
+        (data?.type === "image" && data.text?.trim()) || data?.wordSlice,
+      ),
       onPath: object instanceof IText && Boolean(object.path),
       pathStartOffset:
         object instanceof IText && object.path ? Math.round(object.pathStartOffset ?? 0) : undefined,
@@ -1550,6 +1764,8 @@ export class CanvasController {
         ...(data?.fontId ? { fontId: data.fontId } : {}),
         ...(data?.assetId ? { assetId: data.assetId } : {}),
         ...(data?.confidence !== undefined ? { confidence: data.confidence } : {}),
+        ...(data?.text ? { text: data.text } : {}),
+        ...(data?.wordSlice ? { wordSlice: data.wordSlice } : {}),
         ...(data?.clipPath ? { clipPath: data.clipPath } : {}),
         ...(data?.clipRule ? { clipRule: data.clipRule } : {}),
         ...(data?.clipInvert ? { clipInvert: true } : {}),
@@ -1590,6 +1806,9 @@ export class CanvasController {
         record.pathStartOffset = round(object.pathStartOffset ?? 0);
         record.pathSide = object.pathSide === "right" ? "right" : "left";
       }
+    } else if (data?.type === "image" && data.text) {
+      // Keep OCR label on pixel word slices so Style can promote them to live text.
+      record.text = data.text;
     }
     if (data?.type === "rect" && object instanceof Rect) {
       record.width = round(object.width ?? 1);
@@ -1809,6 +2028,7 @@ export class CanvasController {
           if (clipInvert) data.clipInvert = true;
           if (clipSubtract) data.clipSubtract = clipSubtract;
         }
+        if (record.text?.trim()) data.text = record.text.trim();
       } else {
         object = createRectObject({ id: data.id, name: data.name }).object;
         object.set({
