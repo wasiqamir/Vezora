@@ -240,7 +240,7 @@ export function ReconstructDialog({
         body: JSON.stringify({ projectId, assetId }),
       });
       const startBody = await readResponseJson<{
-        job?: { id: string };
+        job?: { id: string; status?: string };
         error?: { message?: string };
       }>(started);
       if (!started.ok || !startBody?.job) {
@@ -256,29 +256,32 @@ export function ReconstructDialog({
         }
         return;
       }
-      const outcome = await pollJob(activeJobId);
+      // Live API now finishes the job inline; only poll if it is still queued/running.
+      const outcome =
+        startBody.job.status === "succeeded" || startBody.job.status === "failed"
+          ? startBody.job.status
+          : await pollJob(activeJobId);
       if (isStale?.()) return;
       const projectResponse = await fetch(`/api/projects/${projectId}`);
       const project = await readResponseJson<{
         project?: { document: ProjectDocument };
       }>(projectResponse);
       if (isStale?.()) return;
-      if (outcome === "succeeded" && project?.project) {
+      if (project?.project?.document) {
         const prepared = preferEditableElements(project.project.document);
-        setDraft(prepared);
-        setMergeIds([]);
-        setView("side");
-        // Edit elements: clipped slices with child holes punched out of parents (no ghosts).
-        if (intent === "elements") {
-          await commitDocument(prepared, "shapes");
+        const hasOriginal = prepared.objects.some((object) => object.name === "Original");
+        if (outcome === "succeeded" || hasOriginal) {
+          setDraft(prepared);
+          setFailed(outcome !== "succeeded");
+          setMergeIds([]);
+          setView("side");
+          if (intent === "elements" && outcome === "succeeded") {
+            await commitDocument(prepared, "shapes");
+          }
           return;
         }
-      } else if (project?.project?.document.objects.some((object) => object.name === "Original")) {
-        setDraft(project.project.document);
-        setFailed(true);
-      } else {
-        setError("Could not build a draft from this image.");
       }
+      setError("Could not build a draft from this image.");
     } catch (reason) {
       if (!isStale?.()) {
         setError(reason instanceof Error ? reason.message : "Could not build a draft from this image.");

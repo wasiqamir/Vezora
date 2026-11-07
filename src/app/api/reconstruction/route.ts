@@ -1,8 +1,15 @@
-import { after, connection } from "next/server";
+import { connection } from "next/server";
 import { z } from "zod";
 import { projectError, readJson, requireUserId } from "@/features/projects/http";
-import { createReconstructionJob, enqueueReconstruction, ReconstructionError } from "@/features/reconstruction/jobs";
+import {
+  createReconstructionJob,
+  getReconstructionJob,
+  ReconstructionError,
+  runReconstructionJob,
+} from "@/features/reconstruction/jobs";
 import { isResourceId, rateLimited, RECONSTRUCTION_LIMIT, RECONSTRUCTION_WINDOW_MS, takeRateLimit } from "@/features/reliability/limits";
+
+export const maxDuration = 60;
 
 const bodySchema = z.object({
   projectId: z.string().min(1).max(80),
@@ -26,10 +33,15 @@ export async function POST(request: Request) {
   }
   try {
     const job = await createReconstructionJob(userId, parsed.data.projectId, parsed.data.assetId);
-    after(() => enqueueReconstruction(job.id));
-    return Response.json({ job: { id: job.id, status: job.status } }, { status: 202 });
+    // Run inline on Vercel — after()/in-memory queue often never finishes, so the dialog times out.
+    await runReconstructionJob(job.id);
+    const finished = await getReconstructionJob(userId, job.id);
+    return Response.json(
+      { job: finished ?? { id: job.id, status: "failed" } },
+      { status: finished?.status === "succeeded" ? 200 : 202 },
+    );
   } catch (error) {
     if (error instanceof ReconstructionError) return projectError(error.code, error.message, error.status);
-    throw error;
+    return projectError("reconstruction_failed", "Could not build a draft from this image.", 500);
   }
 }

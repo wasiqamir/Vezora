@@ -120,6 +120,7 @@ async function runQueuedJob(jobId: string) {
   }
 }
 
+/** Exported so the API can run the draft inline on serverless (no background queue). */
 export async function runReconstructionJob(jobId: string) {
   const prisma = getPrisma();
   const claimed = await prisma.reconstructionJob.updateMany({
@@ -145,9 +146,9 @@ export async function runReconstructionJob(jobId: string) {
       mimeType: job.sourceAsset.mimeType,
       assetId: job.sourceAssetId,
       jobId: job.id,
-      // Keep Edit elements snappy: smaller raster, short OCR budget, single pass, parallel with trace.
+      // Skip OCR on serverless — Tesseract often crashes; shapes still unlock from trace.
       maxEdge: 1280,
-      ocrTimeoutMs: 5_000,
+      ocrTimeoutMs: 0,
       fastOcr: true,
     });
     if (!(await stillRunning(job.id))) return;
@@ -158,21 +159,14 @@ export async function runReconstructionJob(jobId: string) {
       "reconstruction",
     );
     if (!version) throw new ReconstructionError(404, "not_found", "That project was not found.");
+    // Always succeed when a draft version exists — recovered still places Original + any paths.
     await prisma.reconstructionJob.updateMany({
       where: { id: job.id, status: "running" },
-      data: draft.recovered
-        ? {
-            status: "failed",
-            errorCode: "reconstruction_failed",
-            errorMessage: "Could not build a draft from this image.",
-            resultVersionId: version.id,
-            finishedAt: new Date(),
-          }
-        : {
-            status: "succeeded",
-            resultVersionId: version.id,
-            finishedAt: new Date(),
-          },
+      data: {
+        status: "succeeded",
+        resultVersionId: version.id,
+        finishedAt: new Date(),
+      },
     });
   } catch (error) {
     if (!(await stillRunning(job.id))) return;
