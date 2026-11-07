@@ -8,6 +8,7 @@ import { HomeReveal } from "@/components/home-reveal";
 import { PageFallback } from "@/components/page-fallback";
 import { VezoraMark } from "@/components/vezora-mark";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { AccountStats } from "@/features/account/account-stats";
 import { startProject } from "@/features/account/actions";
 import { DesignPreview } from "@/features/projects/design-preview";
 import { listAccountDesigns } from "@/features/projects/store";
@@ -89,11 +90,7 @@ async function AccountContent() {
         </HomeReveal>
 
         <HomeReveal delay={80}>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <StatCard label="Logos" value={String(logoCount)} accent="text-[#67e8f9]" />
-            <StatCard label="Saves" value={String(saveCount)} accent="text-[#d8b4fe]" />
-            <StatCard label="Shared" value={String(sharedCount)} accent="text-[#fdba74]" />
-          </div>
+          <AccountStats initial={{ logos: logoCount, saves: saveCount, shared: sharedCount }} />
         </HomeReveal>
 
         {designs.length === 0 ? (
@@ -175,15 +172,6 @@ async function AccountContent() {
         )}
       </div>
     </main>
-  );
-}
-
-function StatCard({ label, value, accent }: { label: string; value: string; accent: string }) {
-  return (
-    <div className="home-card rounded-[1.5rem] border border-white/10 bg-white/[0.03] px-5 py-4">
-      <p className="text-[11px] tracking-[0.22em] text-white/40 uppercase">{label}</p>
-      <p className={`mt-2 text-3xl font-semibold tracking-tight ${accent}`}>{value}</p>
-    </div>
   );
 }
 

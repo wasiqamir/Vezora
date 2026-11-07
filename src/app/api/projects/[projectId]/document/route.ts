@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { connection } from "next/server";
 import { z } from "zod";
 import { migrateDocument, ProjectDocumentError } from "@/features/projects/document";
@@ -34,6 +35,10 @@ export async function PUT(request: Request, context: Context) {
   const image = parsed.data.image ? decodeLogoImage(parsed.data.image) : null;
   const project = await saveProjectDocument(userId, projectId, document, parsed.data.source, image);
   if (!project) return projectError("not_found", "That project was not found.", 404);
+  if (parsed.data.source === "save") {
+    revalidatePath("/account");
+    revalidatePath(`/account/${projectId}`);
+  }
   return Response.json({
     project: { id: project.id, name: project.name, updatedAt: project.updatedAt.toISOString() },
   });
