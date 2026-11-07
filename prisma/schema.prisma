@@ -10,7 +10,6 @@ datasource db {
 enum VersionSource {
   save
   autosave
-  export
   duplicate
   template
   reconstruction

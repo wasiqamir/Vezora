@@ -226,8 +226,7 @@ function sourceLabel(source: VersionSource) {
   if (source === "duplicate") return "Copied";
   if (source === "template") return "Started from a template";
   if (source === "reconstruction") return "Built from an image";
-  if (source === "export") return "Exported";
-  return "Saved";
+  return "Exported";
 }
 
 function formatWhen(value: Date) {

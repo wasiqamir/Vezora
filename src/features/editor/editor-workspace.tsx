@@ -692,7 +692,7 @@ export function EditorWorkspace({
               headers: { "content-type": "application/json" },
               body: JSON.stringify({
                 document: controller.projectDocument(),
-                source: "export",
+                source: "save",
                 image,
               }),
             });
