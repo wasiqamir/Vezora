@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { uploadStorageKey, writeUpload } from "@/features/assets/storage";
+import { writeUpload } from "@/features/assets/storage";
 import { blankProjectDocument, migrateDocument, type ProjectDocument } from "@/features/projects/document";
 import { createProject } from "@/features/projects/store";
 import { resolvePublishedTemplate } from "@/features/templates/store";
@@ -79,10 +79,10 @@ async function materializeGuestAssets(
       },
       select: { id: true },
     });
-    await writeUpload(asset.id, bytes);
+    const storageKey = await writeUpload(asset.id, bytes, payload.mimeType);
     await prisma.asset.update({
       where: { id: asset.id },
-      data: { storageKey: uploadStorageKey(asset.id) },
+      data: { storageKey },
     });
     remap.set(guestId, asset.id);
   }

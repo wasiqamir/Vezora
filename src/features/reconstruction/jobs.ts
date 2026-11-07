@@ -1,4 +1,4 @@
-import { readUpload } from "@/features/assets/storage";
+import { isUploadStorageKey, readUpload } from "@/features/assets/storage";
 import { buildReconstructionDraft } from "@/features/reconstruction/draft";
 import { appendProjectVersion } from "@/features/projects/store";
 import { JOB_BUDGET_MS } from "@/features/reliability/limits";
@@ -29,7 +29,7 @@ export async function createReconstructionJob(ownerId: string, projectId: string
     where: { id: assetId, ownerId },
     select: { id: true, mimeType: true, storageKey: true, width: true, height: true },
   });
-  if (!asset || !asset.storageKey.startsWith("uploads/")) {
+  if (!asset || !isUploadStorageKey(asset.storageKey)) {
     throw new ReconstructionError(404, "not_found", "That file was not found.");
   }
   if (asset.mimeType !== "image/png" && asset.mimeType !== "image/jpeg") {
@@ -134,12 +134,12 @@ export async function runReconstructionJob(jobId: string) {
       ownerId: true,
       projectId: true,
       sourceAssetId: true,
-      sourceAsset: { select: { id: true, mimeType: true, width: true, height: true } },
+      sourceAsset: { select: { id: true, mimeType: true, width: true, height: true, storageKey: true } },
     },
   });
   if (!job) return;
   try {
-    const bytes = await readUpload(job.sourceAssetId);
+    const bytes = await readUpload(job.sourceAssetId, job.sourceAsset.storageKey);
     const draft = await buildReconstructionDraft({
       bytes: new Uint8Array(bytes),
       mimeType: job.sourceAsset.mimeType,

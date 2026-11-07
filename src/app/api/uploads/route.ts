@@ -6,7 +6,7 @@ import {
   readImageSize,
   UploadError,
 } from "@/features/assets/inspect";
-import { uploadStorageKey, writeUpload } from "@/features/assets/storage";
+import { writeUpload } from "@/features/assets/storage";
 import { projectError, requireUserId } from "@/features/projects/http";
 import { rateLimited, takeRateLimit, UPLOAD_LIMIT, UPLOAD_WINDOW_MS } from "@/features/reliability/limits";
 import { getPrisma } from "@/lib/db";
@@ -45,15 +45,16 @@ export async function POST(request: Request) {
       },
       select: { id: true, mimeType: true, width: true, height: true, byteSize: true },
     });
-    await writeUpload(asset.id, bytes);
-    await prisma.asset.update({
+    const storageKey = await writeUpload(asset.id, bytes, file.type || "image/png");
+    const updated = await prisma.asset.update({
       where: { id: asset.id },
-      data: { storageKey: uploadStorageKey(asset.id) },
+      data: { storageKey },
+      select: { id: true, mimeType: true, width: true, height: true, byteSize: true },
     });
-    return Response.json({ asset }, { status: 201 });
+    return Response.json({ asset: updated }, { status: 201 });
   } catch (error) {
     if (error instanceof UploadError) return projectError(error.code, error.message, error.status);
     logEvent("error", "upload.failed", { message: error instanceof Error ? error.message : "failed" });
-    throw error;
+    return projectError("upload_failed", "That image could not be uploaded.", 500);
   }
 }

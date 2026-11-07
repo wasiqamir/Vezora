@@ -1,5 +1,5 @@
 import { connection } from "next/server";
-import { readUpload } from "@/features/assets/storage";
+import { isUploadStorageKey, readUpload } from "@/features/assets/storage";
 import { projectError, requireUserId } from "@/features/projects/http";
 import { isResourceId } from "@/features/reliability/limits";
 import { getPrisma } from "@/lib/db";
@@ -19,11 +19,11 @@ export async function GET(_request: Request, context: Context) {
     },
     select: { id: true, mimeType: true, storageKey: true, ownerId: true },
   });
-  if (!asset || !asset.storageKey.startsWith("uploads/")) {
+  if (!asset || !isUploadStorageKey(asset.storageKey)) {
     return projectError("not_found", "That file was not found.", 404);
   }
   try {
-    const bytes = await readUpload(asset.id);
+    const bytes = await readUpload(asset.id, asset.storageKey);
     return new Response(bytes, {
       headers: {
         "content-type": asset.mimeType,
