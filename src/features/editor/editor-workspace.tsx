@@ -477,7 +477,7 @@ export function EditorWorkspace({
                   title={
                     snapshot.keepEdgeOutlines
                       ? "Holes under parts (clean move). Faint rings around moved parts may show."
-                      : "Fills punches so star/line ghosts disappear. Text bands stay exact so letters do not fray."
+                      : "Keeps your exact upload look with no dark punches. Parts stay editable on top."
                   }
                 >
                   <span className="px-2 text-[11px] tracking-wide text-white/55 uppercase">Outlines</span>

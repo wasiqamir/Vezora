@@ -1768,9 +1768,8 @@ export class CanvasController {
       const fullWidth = Math.max(pieceWidth, this.artboard.width || pieceWidth);
       const fullHeight = Math.max(pieceHeight, this.artboard.height || pieceHeight);
       const clipSubtract = data.clipSubtract;
-      // Keep: transparent holes (clean move, rings may show). Remove: fill every punch with the
-      // plate color so star/line ghosts disappear, but only expand non-rect shape holes — expanding
-      // word-band rects frays live text (VOLT).
+      // Keep: transparent holes under parts (rings/punches may show). Remove: keep the full
+      // exact Logo plate (no punches) so the artboard matches the upload; parts stay editable on top.
       const hidePunches =
         data.name === "Logo" && this.reconstruction?.keepEdgeOutlines === false;
       const loaded =
@@ -1786,10 +1785,11 @@ export class CanvasController {
               pieceWidth,
               pieceHeight,
               invert: clipInvert,
-              subtractPath: clipSubtract,
-              expandSubtractPx: hidePunches ? 28 : 0,
-              expandExcludeRectHoles: hidePunches,
-              fillSubtractWith: hidePunches ? this.background || "#111122" : undefined,
+              // Remove drops subtract so letter/star holes never open — no black punches, same look.
+              subtractPath: hidePunches ? undefined : clipSubtract,
+              expandSubtractPx: 0,
+              expandExcludeRectHoles: false,
+              fillSubtractWith: undefined,
               expandClipPx: 0,
             })
           : data.assetId
@@ -2141,7 +2141,7 @@ export class CanvasController {
         const expandSubs = excludeRects
           ? subs.filter((sub) => !isAxisAlignedRectPath(sub))
           : expand > 0
-            ? [input.subtractPath]
+            ? subs
             : [];
         if (expand > 0 && expandSubs.length > 0) {
           context.lineWidth = expand * 2;
@@ -2150,22 +2150,19 @@ export class CanvasController {
           context.strokeStyle = "#000";
           for (const sub of expandSubs) context.stroke(new Path2D(sub));
         }
-        // Force every transparent / AA fringe pixel to opaque plate color so Remove leaves
-        // no black star or letter punches (destination-over alone still left soft ghosts).
+        // Fill only the punched paths (plus the same tiny fringe). Do not wipe every soft
+        // pixel on the Logo — that flattened real AA and made Remove look unlike the upload.
         if (plateFill) {
-          const [pr, pg, pb] = parseCssRgb(plateFill);
-          const imageData = context.getImageData(0, 0, pieceWidth, pieceHeight);
-          const pixels = imageData.data;
-          for (let i = 0; i < pixels.length; i += 4) {
-            const alpha = pixels[i + 3] ?? 0;
-            if (alpha >= 252) continue;
-            const a = alpha / 255;
-            pixels[i] = Math.round((pixels[i] ?? 0) * a + pr * (1 - a));
-            pixels[i + 1] = Math.round((pixels[i + 1] ?? 0) * a + pg * (1 - a));
-            pixels[i + 2] = Math.round((pixels[i + 2] ?? 0) * a + pb * (1 - a));
-            pixels[i + 3] = 255;
+          context.globalCompositeOperation = "destination-over";
+          context.fillStyle = plateFill;
+          context.fill(hole, "nonzero");
+          if (expand > 0 && expandSubs.length > 0) {
+            context.lineWidth = expand * 2;
+            context.lineJoin = "round";
+            context.lineCap = "round";
+            context.strokeStyle = plateFill;
+            for (const sub of expandSubs) context.stroke(new Path2D(sub));
           }
-          context.putImageData(imageData, 0, 0);
         }
       }
       const url = surface.toDataURL("image/png");
@@ -2682,21 +2679,6 @@ function isAxisAlignedRectPath(pathD: string) {
   return /^\s*M\s+[-\d.]+\s+[-\d.]+\s+H\s+[-\d.]+\s+V\s+[-\d.]+\s+H\s+[-\d.]+\s+Z\s*$/i.test(
     pathD.trim(),
   );
-}
-
-function parseCssRgb(color: string): [number, number, number] {
-  const rgb = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
-  if (rgb) return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
-  const hex = color.trim().match(/^#([0-9a-f]{6})$/i);
-  if (hex) {
-    const value = hex[1]!;
-    return [
-      Number.parseInt(value.slice(0, 2), 16),
-      Number.parseInt(value.slice(2, 4), 16),
-      Number.parseInt(value.slice(4, 6), 16),
-    ];
-  }
-  return [17, 17, 34];
 }
 
 /** True when pathD is an axis-aligned rect covering the piece crop (Logo plate). */
