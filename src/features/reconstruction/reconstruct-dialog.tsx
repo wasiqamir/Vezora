@@ -152,14 +152,14 @@ export function ReconstructDialog({
         body,
         signal: controller.signal,
       });
-      const payload = (await response.json()) as {
+      const payload = (await response.json().catch(() => null)) as {
         asset?: { id: string; width: number; height: number; mimeType: string };
         document?: ProjectDocument;
         recovered?: boolean;
         error?: { message?: string };
-      };
-      if (!response.ok || !payload.asset || !payload.document) {
-        throw new Error(payload.error?.message ?? "Could not build a draft from this image.");
+      } | null;
+      if (!response.ok || !payload?.asset || !payload?.document) {
+        throw new Error(payload?.error?.message ?? "Could not build a draft from this image.");
       }
       if (isStale?.()) return;
       registerGuestAsset({
@@ -231,12 +231,12 @@ export function ReconstructDialog({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ projectId, assetId }),
       });
-      const startBody = (await started.json()) as {
+      const startBody = (await started.json().catch(() => null)) as {
         job?: { id: string };
         error?: { message?: string };
-      };
-      if (!started.ok || !startBody.job) {
-        throw new Error(startBody.error?.message ?? "Could not build a draft from this image.");
+      } | null;
+      if (!started.ok || !startBody?.job) {
+        throw new Error(startBody?.error?.message ?? "Could not build a draft from this image.");
       }
       activeJobId = startBody.job.id;
       setJobId(activeJobId);
@@ -246,11 +246,12 @@ export function ReconstructDialog({
       }
       const outcome = await pollJob(activeJobId);
       if (isStale?.()) return;
-      const project = (await fetch(`/api/projects/${projectId}`).then((response) => response.json())) as {
+      const project = (await fetch(`/api/projects/${projectId}`)
+        .then((response) => response.json().catch(() => null))) as {
         project?: { document: ProjectDocument };
-      };
+      } | null;
       if (isStale?.()) return;
-      if (outcome === "succeeded" && project.project) {
+      if (outcome === "succeeded" && project?.project) {
         const prepared = preferEditableElements(project.project.document);
         setDraft(prepared);
         setMergeIds([]);
@@ -260,7 +261,7 @@ export function ReconstructDialog({
           await commitDocument(prepared, "shapes");
           return;
         }
-      } else if (project.project?.document.objects.some((object) => object.name === "Original")) {
+      } else if (project?.project?.document.objects.some((object) => object.name === "Original")) {
         setDraft(project.project.document);
         setFailed(true);
       } else {
@@ -287,12 +288,12 @@ export function ReconstructDialog({
       const body = new FormData();
       body.set("file", file);
       const uploaded = await fetch("/api/uploads", { method: "POST", body });
-      const uploadBody = (await uploaded.json()) as {
+      const uploadBody = (await uploaded.json().catch(() => null)) as {
         asset?: { id: string };
         error?: { message?: string };
-      };
-      if (!uploaded.ok || !uploadBody.asset) {
-        throw new Error(uploadBody.error?.message ?? "That image could not be uploaded.");
+      } | null;
+      if (!uploaded.ok || !uploadBody?.asset) {
+        throw new Error(uploadBody?.error?.message ?? "That image could not be uploaded.");
       }
       await createDraftFromAsset(uploadBody.asset.id);
     } catch (reason) {
@@ -948,9 +949,9 @@ async function pollJob(jobId: string) {
     await new Promise((resolve) => window.setTimeout(resolve, 400));
     const response = await fetch(`/api/reconstruction/${jobId}`);
     if (!response.ok) return "failed";
-    const body = (await response.json()) as { job?: { status?: string } };
-    if (body.job?.status === "succeeded") return "succeeded";
-    if (body.job?.status === "failed") return "failed";
+    const body = (await response.json().catch(() => null)) as { job?: { status?: string } } | null;
+    if (body?.job?.status === "succeeded") return "succeeded";
+    if (body?.job?.status === "failed") return "failed";
   }
   return "failed";
 }
