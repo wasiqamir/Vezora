@@ -51,13 +51,13 @@ export async function POST(request: Request) {
 
     const assetId = `guest_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
     const jobId = `guest_${assetId}`.slice(0, 80);
-    // Fast trace + short OCR so Edit elements opens editable marks and live words without hanging.
+    // Trace only on guest — Tesseract often crashes/empties the serverless response on Vercel.
     const draft = await buildReconstructionDraft({
       bytes,
       mimeType: file.type || "image/png",
       assetId,
       jobId,
-      ocrTimeoutMs: 4_000,
+      ocrTimeoutMs: 0,
       maxEdge: 960,
       fastOcr: true,
     });

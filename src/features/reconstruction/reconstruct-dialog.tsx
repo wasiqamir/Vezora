@@ -28,6 +28,17 @@ type View = "original" | "overlay" | "draft" | "side";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
+/** Empty/HTML error bodies from live serverless must not throw JSON.parse in the browser. */
+async function readResponseJson<T>(response: Response): Promise<T | null> {
+  const raw = await response.text();
+  if (!raw.trim()) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
 const quiet =
   "h-9 rounded-full border border-white/15 bg-white/[0.04] px-4 text-white/85 hover:bg-white/10 hover:text-white";
 const primary =
@@ -152,12 +163,12 @@ export function ReconstructDialog({
         body,
         signal: controller.signal,
       });
-      const payload = (await response.json().catch(() => null)) as {
+      const payload = await readResponseJson<{
         asset?: { id: string; width: number; height: number; mimeType: string };
         document?: ProjectDocument;
         recovered?: boolean;
         error?: { message?: string };
-      } | null;
+      }>(response);
       if (!response.ok || !payload?.asset || !payload?.document) {
         throw new Error(payload?.error?.message ?? "Could not build a draft from this image.");
       }
@@ -224,32 +235,41 @@ export function ReconstructDialog({
         return;
       }
       // Clear any stuck/in-flight job so Edit elements is not blocked by a prior run.
-      await cancelActiveReconstructions();
+      // Server-action flight responses can be empty on live — never let that surface as JSON.parse.
+      try {
+        await cancelActiveReconstructions();
+      } catch {
+        // Continue; starting a new job still works if cancel failed.
+      }
       if (isStale?.()) return;
       const started = await fetch("/api/reconstruction", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ projectId, assetId }),
       });
-      const startBody = (await started.json().catch(() => null)) as {
+      const startBody = await readResponseJson<{
         job?: { id: string };
         error?: { message?: string };
-      } | null;
+      }>(started);
       if (!started.ok || !startBody?.job) {
         throw new Error(startBody?.error?.message ?? "Could not build a draft from this image.");
       }
       activeJobId = startBody.job.id;
       setJobId(activeJobId);
       if (isStale?.()) {
-        void cancelReconstruction(activeJobId);
+        try {
+          await cancelReconstruction(activeJobId);
+        } catch {
+          // Ignore cancel failures when abandoning a stale run.
+        }
         return;
       }
       const outcome = await pollJob(activeJobId);
       if (isStale?.()) return;
-      const project = (await fetch(`/api/projects/${projectId}`)
-        .then((response) => response.json().catch(() => null))) as {
+      const projectResponse = await fetch(`/api/projects/${projectId}`);
+      const project = await readResponseJson<{
         project?: { document: ProjectDocument };
-      } | null;
+      }>(projectResponse);
       if (isStale?.()) return;
       if (outcome === "succeeded" && project?.project) {
         const prepared = preferEditableElements(project.project.document);
@@ -288,10 +308,10 @@ export function ReconstructDialog({
       const body = new FormData();
       body.set("file", file);
       const uploaded = await fetch("/api/uploads", { method: "POST", body });
-      const uploadBody = (await uploaded.json().catch(() => null)) as {
+      const uploadBody = await readResponseJson<{
         asset?: { id: string };
         error?: { message?: string };
-      } | null;
+      }>(uploaded);
       if (!uploaded.ok || !uploadBody?.asset) {
         throw new Error(uploadBody?.error?.message ?? "That image could not be uploaded.");
       }
@@ -311,7 +331,9 @@ export function ReconstructDialog({
     return () => {
       // Invalidate this run; createDraftFromAsset cancels its job when it notices stale.
       if (runGeneration.current === generation) runGeneration.current += 1;
-      if (jobId) void cancelReconstruction(jobId);
+      if (jobId) {
+        void cancelReconstruction(jobId).catch(() => undefined);
+      }
     };
     // Only auto-start once per asset when Edit elements opens the dialog.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount/asset trigger
@@ -524,7 +546,7 @@ export function ReconstructDialog({
                 variant="outline"
                 className={quiet}
                 onClick={() => {
-                  if (jobId) void cancelReconstruction(jobId);
+                  if (jobId) void cancelReconstruction(jobId).catch(() => undefined);
                   onClose();
                 }}
               >
@@ -949,7 +971,7 @@ async function pollJob(jobId: string) {
     await new Promise((resolve) => window.setTimeout(resolve, 400));
     const response = await fetch(`/api/reconstruction/${jobId}`);
     if (!response.ok) return "failed";
-    const body = (await response.json().catch(() => null)) as { job?: { status?: string } } | null;
+    const body = await readResponseJson<{ job?: { status?: string } }>(response);
     if (body?.job?.status === "succeeded") return "succeeded";
     if (body?.job?.status === "failed") return "failed";
   }
