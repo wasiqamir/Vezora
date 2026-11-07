@@ -2109,6 +2109,29 @@ export class CanvasController {
       }
       // Punch child regions out of parents so moving a circle/letter leaves a hole, not a copy.
       if (input.subtractPath && !input.invert) {
+        // Sample the Logo plate BEFORE punching — after destination-out corners can be empty
+        // and we'd fall back to a darker artboard hex, which shows as black punches.
+        let plateFill = input.fillSubtractWith;
+        if (plateFill) {
+          const samples: Array<[number, number, number]> = [];
+          for (const [px, py] of [
+            [4, 4],
+            [pieceWidth - 5, 4],
+            [4, pieceHeight - 5],
+            [pieceWidth - 5, pieceHeight - 5],
+            [Math.floor(pieceWidth / 2), 4],
+            [4, Math.floor(pieceHeight / 2)],
+          ] as const) {
+            const sx = Math.min(pieceWidth - 1, Math.max(0, px));
+            const sy = Math.min(pieceHeight - 1, Math.max(0, py));
+            const sample = context.getImageData(sx, sy, 1, 1).data;
+            if (sample[3] > 200) samples.push([sample[0], sample[1], sample[2]]);
+          }
+          if (samples.length > 0) {
+            const mid = samples[Math.floor(samples.length / 2)]!;
+            plateFill = `rgb(${mid[0]},${mid[1]},${mid[2]})`;
+          }
+        }
         context.globalCompositeOperation = "destination-out";
         const hole = new Path2D(input.subtractPath);
         context.fill(hole, "nonzero");
@@ -2127,24 +2150,12 @@ export class CanvasController {
           context.strokeStyle = "#000";
           for (const sub of expandSubs) context.stroke(new Path2D(sub));
         }
-        // Paint plate color into every punch so Remove clears star/line ghosts. Expand only
-        // shape holes — never word-band rects — so VOLT stays sharp.
-        if (input.fillSubtractWith) {
-          let fill = input.fillSubtractWith;
-          const sx = Math.min(8, Math.max(0, pieceWidth - 1));
-          const sy = Math.min(8, Math.max(0, pieceHeight - 1));
-          const sample = context.getImageData(sx, sy, 1, 1).data;
-          if (sample[3] > 200) fill = `rgb(${sample[0]},${sample[1]},${sample[2]})`;
+        // Paint plate color under EVERY transparent pixel (holes + AA fringe). Path-only fill
+        // left soft black star/letter punches; a full-piece destination-over wipe clears them.
+        if (plateFill) {
           context.globalCompositeOperation = "destination-over";
-          context.fillStyle = fill;
-          context.fill(hole, "nonzero");
-          if (expand > 0 && expandSubs.length > 0) {
-            context.lineWidth = expand * 2;
-            context.lineJoin = "round";
-            context.lineCap = "round";
-            context.strokeStyle = fill;
-            for (const sub of expandSubs) context.stroke(new Path2D(sub));
-          }
+          context.fillStyle = plateFill;
+          context.fillRect(input.pieceX, input.pieceY, pieceWidth, pieceHeight);
         }
       }
       const url = surface.toDataURL("image/png");
