@@ -125,7 +125,12 @@ async function AccountContent() {
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {designs.map((design, index) => (
               <HomeReveal key={design.id} delay={100 + index * 70} from="scale" className="h-full">
-                <article className="home-card group flex h-full flex-col overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#100818] shadow-[0_24px_60px_rgba(0,0,0,0.28)]">
+                <article className="home-card group relative flex h-full flex-col overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#100818] shadow-[0_24px_60px_rgba(0,0,0,0.28)] transition-[border-color,box-shadow] hover:border-[#c4b5fd]/35 hover:shadow-[0_28px_70px_rgba(0,0,0,0.35)]">
+                  <Link
+                    href={`/editor/${design.id}`}
+                    className="absolute inset-0 z-[1]"
+                    aria-label={`Open ${design.name}`}
+                  />
                   <div className="relative overflow-hidden border-b border-white/8 bg-[#0a0618]">
                     <div
                       aria-hidden="true"
@@ -139,7 +144,7 @@ async function AccountContent() {
                       frameClassName="relative h-48 bg-transparent px-6 sm:h-52"
                     />
                     {design.shared ? (
-                      <span className="absolute top-3 right-3 rounded-full border border-[#fdba74]/35 bg-[#fdba74]/15 px-2.5 py-1 text-[10px] font-medium tracking-[0.14em] text-[#fdba74] uppercase">
+                      <span className="absolute top-3 right-3 z-[2] rounded-full border border-[#fdba74]/35 bg-[#fdba74]/15 px-2.5 py-1 text-[10px] font-medium tracking-[0.14em] text-[#fdba74] uppercase">
                         Shared
                       </span>
                     ) : null}
@@ -153,7 +158,7 @@ async function AccountContent() {
                       {" · "}
                       Edited {formatWhen(design.updatedAt)}
                     </p>
-                    <div className="mt-5 flex flex-wrap gap-2">
+                    <div className="relative z-[2] mt-5 flex flex-wrap gap-2">
                       <Link href={`/editor/${design.id}`} className={cn(buttonVariants(), cta, "h-10 px-4")}>
                         Edit
                       </Link>
