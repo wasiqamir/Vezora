@@ -1768,9 +1768,9 @@ export class CanvasController {
       const fullWidth = Math.max(pieceWidth, this.artboard.width || pieceWidth);
       const fullHeight = Math.max(pieceHeight, this.artboard.height || pieceHeight);
       const clipSubtract = data.clipSubtract;
-      // Keep: transparent holes (clean move, rings may show). Remove: punch + fill holes with the
-      // artboard color so moving a pink circle leaves no dark void and no pink ghost.
-      // Expand every hole (not only round ones) so letter bands under live text leave no outline ghosts.
+      // Keep: transparent holes (clean move, rings may show). Remove: punch + fill round shape
+      // holes with the artboard color so moving a circle leaves no dark void. Never expand/fill
+      // word-band punches — that frays live text (VOLT, etc.) and no longer matches the upload.
       const hidePunches =
         data.name === "Logo" && this.reconstruction?.keepEdgeOutlines === false;
       const loaded =
@@ -1788,7 +1788,7 @@ export class CanvasController {
               invert: clipInvert,
               subtractPath: clipSubtract,
               expandSubtractPx: hidePunches ? 22 : 0,
-              expandOnlyRoundHoles: false,
+              expandOnlyRoundHoles: true,
               fillSubtractWith: hidePunches ? this.background || "#111122" : undefined,
               expandClipPx: 0,
             })
@@ -2113,45 +2113,54 @@ export class CanvasController {
         const hole = new Path2D(input.subtractPath);
         context.fill(hole, "nonzero");
         const expand = input.expandSubtractPx ?? 0;
+        const roundOnly = input.expandOnlyRoundHoles === true;
+        const roundSubs = roundOnly
+          ? splitSubpaths(input.subtractPath).filter((sub) => {
+              const box = pathBounds(sub);
+              return Boolean(box && isRoundClipPath(sub, box.width, box.height));
+            })
+          : [];
         if (expand > 0) {
           context.lineWidth = expand * 2;
           context.lineJoin = "round";
           context.lineCap = "round";
           context.strokeStyle = "#000";
-          if (input.expandOnlyRoundHoles) {
-            for (const sub of splitSubpaths(input.subtractPath)) {
-              const box = pathBounds(sub);
-              if (!box || !isRoundClipPath(sub, box.width, box.height)) continue;
-              context.stroke(new Path2D(sub));
-            }
+          if (roundOnly) {
+            for (const sub of roundSubs) context.stroke(new Path2D(sub));
           } else {
             context.stroke(hole);
           }
         }
         // Paint plate-matching color into holes so Remove does not leave visible dark punches.
+        // With roundOnly, only fill/expand circular mark holes — leave word-band punches alone
+        // so live text stays identical to the original upload.
         if (input.fillSubtractWith) {
-          // Prefer the Logo's own dark pixels over the artboard hex — they often differ slightly.
           let fill = input.fillSubtractWith;
           const sx = Math.min(8, Math.max(0, pieceWidth - 1));
           const sy = Math.min(8, Math.max(0, pieceHeight - 1));
-          // Sample before destination-over; corners of the full Logo plate are usually the bg.
           const sample = context.getImageData(sx, sy, 1, 1).data;
           if (sample[3] > 200) fill = `rgb(${sample[0]},${sample[1]},${sample[2]})`;
           context.globalCompositeOperation = "destination-over";
           context.fillStyle = fill;
-          context.fill(hole, "nonzero");
-          if (expand > 0) {
-            context.lineWidth = expand * 2;
-            context.lineJoin = "round";
-            context.lineCap = "round";
-            context.strokeStyle = fill;
-            if (input.expandOnlyRoundHoles) {
-              for (const sub of splitSubpaths(input.subtractPath)) {
-                const box = pathBounds(sub);
-                if (!box || !isRoundClipPath(sub, box.width, box.height)) continue;
-                context.stroke(new Path2D(sub));
+          if (roundOnly) {
+            for (const sub of roundSubs) {
+              const path = new Path2D(sub);
+              context.fill(path, "nonzero");
+              if (expand > 0) {
+                context.lineWidth = expand * 2;
+                context.lineJoin = "round";
+                context.lineCap = "round";
+                context.strokeStyle = fill;
+                context.stroke(path);
               }
-            } else {
+            }
+          } else {
+            context.fill(hole, "nonzero");
+            if (expand > 0) {
+              context.lineWidth = expand * 2;
+              context.lineJoin = "round";
+              context.lineCap = "round";
+              context.strokeStyle = fill;
               context.stroke(hole);
             }
           }
