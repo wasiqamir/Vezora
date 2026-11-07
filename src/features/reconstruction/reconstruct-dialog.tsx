@@ -26,8 +26,6 @@ const GUEST_DRAFT_TIMEOUT_MS = 20_000;
 
 type View = "original" | "overlay" | "draft" | "side";
 
-const MAX_BYTES = 8 * 1024 * 1024;
-
 /** Empty/HTML error bodies from live serverless must not throw JSON.parse in the browser. */
 async function readResponseJson<T>(response: Response): Promise<T | null> {
   const raw = await response.text();
@@ -127,20 +125,14 @@ export function ReconstructDialog({
       setError("Use a PNG or JPG image.");
       return;
     }
-    if (next.size > MAX_BYTES) {
-      setFile(null);
-      setSize(null);
-      setError("Files must be 8 MB or smaller.");
-      return;
-    }
     try {
       const bitmap = await createImageBitmap(next);
       const measured = { width: bitmap.width, height: bitmap.height };
       bitmap.close();
-      if (measured.width < 64 || measured.height < 64 || measured.width > 4096 || measured.height > 4096) {
+      if (measured.width < 1 || measured.height < 1) {
         setFile(null);
         setSize(null);
-        setError("Images must be between 64 and 4096 pixels on each edge.");
+        setError("That file is not a valid image.");
         return;
       }
       setFile(next);
@@ -558,8 +550,8 @@ export function ReconstructDialog({
           {!running && !draft && !(initialAssetId && !error) ? (
             <div className="flex flex-col gap-4">
               <p className="text-sm leading-relaxed text-white/60">
-                PNG and JPG only. Up to 8 MB. 64 to 4096 px on each side. Save places that exact image on the
-                artboard so you can select, move, and resize it.
+                PNG and JPG only. Save places that exact image on the artboard so you can select, move, and
+                resize it.
               </p>
               <label
                 className={cn(

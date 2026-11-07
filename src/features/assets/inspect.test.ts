@@ -40,14 +40,14 @@ describe("upload inspection", () => {
     );
   });
 
-  it("rejects the wrong type, an oversized file, and an edge outside the canvas range", () => {
+  it("rejects the wrong type and invalid zero-size edges, but allows any positive size", () => {
     assert.throws(() => assertCanvasType("image/gif"), (error: unknown) => {
       return error instanceof UploadError && error.status === 422 && error.code === "unsupported_type";
     });
-    assert.throws(() => assertUploadSize(8 * 1024 * 1024 + 1), (error: unknown) => {
-      return error instanceof UploadError && error.status === 413 && error.code === "upload_too_large";
-    });
-    assert.throws(() => assertImageEdges(32, 100), (error: unknown) => {
+    assert.doesNotThrow(() => assertUploadSize(8 * 1024 * 1024 + 1));
+    assert.doesNotThrow(() => assertImageEdges(32, 100));
+    assert.doesNotThrow(() => assertImageEdges(8000, 8000));
+    assert.throws(() => assertImageEdges(0, 100), (error: unknown) => {
       return error instanceof UploadError && error.status === 422 && error.code === "validation_failed";
     });
     assert.throws(() => readImageSize(png(0, 0).slice(0, 8), "image/png"), UploadError);

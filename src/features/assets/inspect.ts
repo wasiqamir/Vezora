@@ -1,7 +1,3 @@
-const MAX_BYTES = 8 * 1024 * 1024;
-const MIN_EDGE = 64;
-const MAX_EDGE = 4096;
-
 export class UploadError extends Error {
   readonly status: number;
   readonly code: string;
@@ -15,11 +11,8 @@ export class UploadError extends Error {
 
 const CANVAS_TYPES = new Set(["image/png", "image/jpeg", "image/svg+xml"]);
 
-export function assertUploadSize(byteSize: number) {
-  if (byteSize > MAX_BYTES) {
-    throw new UploadError(413, "upload_too_large", "Files must be 8 MB or smaller.");
-  }
-}
+/** Kept for call-site compatibility — size is no longer limited. */
+export function assertUploadSize(_byteSize: number) {}
 
 export function assertCanvasType(mimeType: string) {
   if (!CANVAS_TYPES.has(mimeType)) {
@@ -27,13 +20,10 @@ export function assertCanvasType(mimeType: string) {
   }
 }
 
+/** Kept for call-site compatibility — edge length is no longer limited. */
 export function assertImageEdges(width: number, height: number) {
-  if (width < MIN_EDGE || height < MIN_EDGE || width > MAX_EDGE || height > MAX_EDGE) {
-    throw new UploadError(
-      422,
-      "validation_failed",
-      "Images must be between 64 and 4096 pixels on each edge.",
-    );
+  if (width < 1 || height < 1) {
+    throw new UploadError(422, "validation_failed", "That file is not a valid image.");
   }
 }
 

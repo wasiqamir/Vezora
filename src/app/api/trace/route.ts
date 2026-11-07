@@ -5,14 +5,10 @@ import { projectError, requireUserId } from "@/features/projects/http";
 import { rateLimited, takeRateLimit, TRACE_LIMIT, TRACE_WINDOW_MS } from "@/features/reliability/limits";
 import { logEvent } from "@/lib/log";
 
-const MAX_BODY = 8 * 1024 * 1024;
-
 export async function POST(request: Request) {
   await connection();
   const userId = await requireUserId();
   if (!userId) return projectError("unauthorized", "Sign in to continue.", 401);
-  const advertised = Number(request.headers.get("content-length") ?? 0);
-  if (advertised > MAX_BODY) return projectError("upload_too_large", "Files must be 8 MB or smaller.", 413);
   const limit = takeRateLimit(`trace:${userId}`, TRACE_LIMIT, TRACE_WINDOW_MS);
   if (!limit.ok) return rateLimited("Too many traces. Wait a moment and try again.", limit.retryAfterSeconds);
   try {

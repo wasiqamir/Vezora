@@ -1,7 +1,7 @@
 import { readUpload } from "@/features/assets/storage";
 import { buildReconstructionDraft } from "@/features/reconstruction/draft";
 import { appendProjectVersion } from "@/features/projects/store";
-import { JOB_BUDGET_MS, MAX_PIXELS } from "@/features/reliability/limits";
+import { JOB_BUDGET_MS } from "@/features/reliability/limits";
 import { getPrisma } from "@/lib/db";
 import { logEvent } from "@/lib/log";
 
@@ -138,19 +138,6 @@ export async function runReconstructionJob(jobId: string) {
     },
   });
   if (!job) return;
-  const pixels = (job.sourceAsset.width ?? 0) * (job.sourceAsset.height ?? 0);
-  if (pixels > MAX_PIXELS) {
-    await prisma.reconstructionJob.updateMany({
-      where: { id: job.id, status: "running" },
-      data: {
-        status: "failed",
-        errorCode: "validation_failed",
-        errorMessage: "That image is too large to reconstruct.",
-        finishedAt: new Date(),
-      },
-    });
-    return;
-  }
   try {
     const bytes = await readUpload(job.sourceAssetId);
     const draft = await buildReconstructionDraft({

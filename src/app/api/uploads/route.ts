@@ -12,14 +12,10 @@ import { rateLimited, takeRateLimit, UPLOAD_LIMIT, UPLOAD_WINDOW_MS } from "@/fe
 import { getPrisma } from "@/lib/db";
 import { logEvent } from "@/lib/log";
 
-const MAX_BODY = 8 * 1024 * 1024 + 64 * 1024;
-
 export async function POST(request: Request) {
   await connection();
   const userId = await requireUserId();
   if (!userId) return projectError("unauthorized", "Sign in to continue.", 401);
-  const advertised = Number(request.headers.get("content-length") ?? 0);
-  if (advertised > MAX_BODY) return projectError("upload_too_large", "Files must be 8 MB or smaller.", 413);
   const limit = takeRateLimit(`upload:${userId}`, UPLOAD_LIMIT, UPLOAD_WINDOW_MS);
   if (!limit.ok) return rateLimited("Too many uploads. Wait a moment and try again.", limit.retryAfterSeconds);
   try {

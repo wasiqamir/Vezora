@@ -9,7 +9,6 @@ import {
 import { projectError } from "@/features/projects/http";
 import { buildReconstructionDraft } from "@/features/reconstruction/draft";
 import {
-  MAX_PIXELS,
   rateLimited,
   RECONSTRUCTION_LIMIT,
   RECONSTRUCTION_WINDOW_MS,
@@ -19,8 +18,6 @@ import { logEvent } from "@/lib/log";
 
 export const maxDuration = 60;
 
-const MAX_BODY = 8 * 1024 * 1024 + 64 * 1024;
-
 /** Guest Start-from-image draft: no account project — returns an editable document + asset id. */
 export async function POST(request: Request) {
   await connection();
@@ -29,9 +26,6 @@ export async function POST(request: Request) {
   if (!limit.ok) {
     return rateLimited("Too many reconstructions. Wait a moment and try again.", limit.retryAfterSeconds);
   }
-
-  const advertised = Number(request.headers.get("content-length") ?? 0);
-  if (advertised > MAX_BODY) return projectError("upload_too_large", "Files must be 8 MB or smaller.", 413);
 
   try {
     const form = await request.formData();
@@ -45,9 +39,6 @@ export async function POST(request: Request) {
     assertUploadSize(bytes.byteLength);
     const size = readImageSize(bytes, file.type);
     assertImageEdges(size.width, size.height);
-    if (size.width * size.height > MAX_PIXELS) {
-      return projectError("validation_failed", "That image is too large to reconstruct.", 422);
-    }
 
     const assetId = `guest_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
     const jobId = `guest_${assetId}`.slice(0, 80);
