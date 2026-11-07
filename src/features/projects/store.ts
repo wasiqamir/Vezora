@@ -255,11 +255,13 @@ export async function storeProjectLogo(ownerId: string, projectId: string, file:
   return url;
 }
 
+const EXPORT_DEDUPE_MS = 15_000;
+
 export async function saveProjectDocument(
   ownerId: string,
   projectId: string,
   document: ProjectDocument,
-  source: Extract<VersionSource, "save" | "autosave">,
+  source: Extract<VersionSource, "save" | "autosave" | "export">,
   image?: LogoFile | null,
 ) {
   const prisma = getPrisma();
@@ -272,16 +274,23 @@ export async function saveProjectDocument(
     const latest = await tx.projectVersion.findFirst({
       where: { projectId },
       orderBy: { number: "desc" },
-      select: { id: true, number: true },
+      select: { id: true, number: true, source: true, createdAt: true },
     });
-    // Autosave keeps the working draft only — does not add an account "save".
-    // Export (source: save) appends a counted version.
+    // Autosave keeps the working draft only — does not add an account count.
+    // Export appends one counted version (deduped if the same export fires twice).
     let number: number;
-    if (source === "autosave" && latest) {
-      number = latest.number;
+    const recentExport =
+      source === "export" &&
+      latest?.source === "export" &&
+      Date.now() - latest.createdAt.getTime() < EXPORT_DEDUPE_MS;
+    if ((source === "autosave" && latest) || recentExport) {
+      number = latest!.number;
       await tx.projectVersion.update({
-        where: { id: latest.id },
-        data: { document: document as Prisma.InputJsonValue },
+        where: { id: latest!.id },
+        data: {
+          document: document as Prisma.InputJsonValue,
+          ...(source === "export" ? { source: "export" as const } : {}),
+        },
       });
     } else {
       number = (latest?.number ?? 0) + 1;
@@ -304,10 +313,11 @@ export async function saveProjectDocument(
   if (!saved) return null;
   const recent =
     saved.imageStoredAt != null && Date.now() - saved.imageStoredAt.getTime() < IMAGE_GAP_MS;
+  const counted = source === "export" || source === "save";
   const snapshot =
-    image && (source === "save" || !recent)
+    image && (counted || !recent)
       ? image
-      : source === "save"
+      : source === "export"
         ? {
             body: Buffer.from(templatePreviewSvg(document)),
             mime: "image/svg+xml" as const,
@@ -334,7 +344,7 @@ export async function listAccountDesigns(ownerId: string) {
       updatedAt: true,
       shareToken: true,
       imageUrl: true,
-      _count: { select: { versions: { where: { source: "save" } } } },
+      _count: { select: { versions: { where: { source: "export" } } } },
       versions: {
         orderBy: { number: "desc" },
         take: 1,
@@ -352,8 +362,9 @@ export async function listAccountDesigns(ownerId: string) {
           name: project.name,
           updatedAt: project.updatedAt,
           shared: Boolean(project.shareToken),
-          // Only export saves (source: save) — artboard autosaves do not count.
+          // Only real file exports — not artboard autosaves or project create.
           saves: project._count.versions,
+          exported: project._count.versions > 0,
           imageUrl: project.imageUrl,
           document: migrateDocument(latest.document),
         },
@@ -373,9 +384,9 @@ export async function getAccountDesign(ownerId: string, projectId: string) {
       id: true,
       name: true,
       shareToken: true,
-      _count: { select: { versions: { where: { source: "save" } } } },
+      _count: { select: { versions: { where: { source: "export" } } } },
       versions: {
-        where: { source: "save" },
+        where: { source: "export" },
         orderBy: { number: "desc" },
         take: HISTORY_LIMIT,
         select: { id: true, number: true, source: true, createdAt: true },

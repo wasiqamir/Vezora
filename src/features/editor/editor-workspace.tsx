@@ -674,7 +674,7 @@ export function EditorWorkspace({
             if (guest) return;
             const controller = controllerRef.current;
             if (!controller) return;
-            // Only exports create a counted account save — artboard edits stay as silent autosaves.
+            // Only file exports create a counted account logo/save — artboard edits stay silent.
             let image: string | undefined;
             try {
               const file = await controller.createExport({
@@ -692,7 +692,7 @@ export function EditorWorkspace({
               headers: { "content-type": "application/json" },
               body: JSON.stringify({
                 document: controller.projectDocument(),
-                source: "save",
+                source: "export",
                 image,
               }),
             });

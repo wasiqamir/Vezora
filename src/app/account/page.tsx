@@ -38,6 +38,8 @@ async function AccountContent() {
   const name = session.user.name?.trim() || "Creator";
   const firstName = name.split(/\s+/)[0] || "Creator";
   const sharedCount = designs.filter((design) => design.shared).length;
+  // Logos = designs that have been exported at least once (not every draft project).
+  const logoCount = designs.filter((design) => design.exported).length;
   const saveCount = designs.reduce((total, design) => total + design.saves, 0);
 
   return (
@@ -88,7 +90,7 @@ async function AccountContent() {
 
         <HomeReveal delay={80}>
           <div className="grid gap-3 sm:grid-cols-3">
-            <StatCard label="Logos" value={String(designs.length)} accent="text-[#67e8f9]" />
+            <StatCard label="Logos" value={String(logoCount)} accent="text-[#67e8f9]" />
             <StatCard label="Saves" value={String(saveCount)} accent="text-[#d8b4fe]" />
             <StatCard label="Shared" value={String(sharedCount)} accent="text-[#fdba74]" />
           </div>

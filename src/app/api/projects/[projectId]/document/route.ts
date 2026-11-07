@@ -8,7 +8,7 @@ import { saveProjectDocument } from "@/features/projects/store";
 
 const saveSchema = z.object({
   document: z.unknown(),
-  source: z.enum(["save", "autosave"]),
+  source: z.enum(["save", "autosave", "export"]),
   image: z.string().max(3_500_000).optional(),
 });
 
