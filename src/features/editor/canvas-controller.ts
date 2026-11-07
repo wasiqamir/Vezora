@@ -1768,8 +1768,8 @@ export class CanvasController {
       const fullWidth = Math.max(pieceWidth, this.artboard.width || pieceWidth);
       const fullHeight = Math.max(pieceHeight, this.artboard.height || pieceHeight);
       const clipSubtract = data.clipSubtract;
-      // Keep: transparent holes under parts (rings/punches may show). Remove: keep the full
-      // exact Logo plate (no punches) so the artboard matches the upload; parts stay editable on top.
+      // Keep: transparent holes (rings may show). Remove: punch + fill with plate color so
+      // moving a pink circle leaves no leftover copy and no dark void.
       const hidePunches =
         data.name === "Logo" && this.reconstruction?.keepEdgeOutlines === false;
       const loaded =
@@ -1785,11 +1785,10 @@ export class CanvasController {
               pieceWidth,
               pieceHeight,
               invert: clipInvert,
-              // Remove drops subtract so letter/star holes never open — no black punches, same look.
-              subtractPath: hidePunches ? undefined : clipSubtract,
-              expandSubtractPx: 0,
+              subtractPath: clipSubtract,
+              expandSubtractPx: hidePunches ? 3 : 0,
               expandExcludeRectHoles: false,
-              fillSubtractWith: undefined,
+              fillSubtractWith: hidePunches ? this.background || "#111122" : undefined,
               expandClipPx: 0,
             })
           : data.assetId
