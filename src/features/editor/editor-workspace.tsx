@@ -317,7 +317,7 @@ export function EditorWorkspace({
           >
             Start from an image
           </Button>
-          {sourceAssetId && !guest ? (
+          {sourceAssetId ? (
             <Button
               type="button"
               variant="outline"

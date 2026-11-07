@@ -18,8 +18,7 @@ import {
   useEditableText,
   useVectorOutlines,
 } from "@/features/reconstruction/correct";
-import { createObjectId } from "@/features/editor/objects";
-import { registerGuestAsset, uploadSrc } from "@/features/editor/guest-assets";
+import { getGuestAsset, registerGuestAsset, uploadSrc } from "@/features/editor/guest-assets";
 import { templatePreviewSvg } from "@/features/templates/preview";
 
 type View = "original" | "overlay" | "draft" | "side";
@@ -139,11 +138,49 @@ export function ReconstructDialog({
     }
   }
 
+  async function createGuestDraftFromFile(source: File, isStale?: () => boolean) {
+    const body = new FormData();
+    body.set("file", source);
+    const response = await fetch("/api/reconstruction/guest", { method: "POST", body });
+    const payload = (await response.json()) as {
+      asset?: { id: string; width: number; height: number; mimeType: string };
+      document?: ProjectDocument;
+      recovered?: boolean;
+      error?: { message?: string };
+    };
+    if (!response.ok || !payload.asset || !payload.document) {
+      throw new Error(payload.error?.message ?? "Could not build a draft from this image.");
+    }
+    if (isStale?.()) return;
+    registerGuestAsset({
+      id: payload.asset.id,
+      blob: source,
+      mimeType: payload.asset.mimeType || source.type || "image/png",
+      width: payload.asset.width,
+      height: payload.asset.height,
+      name: source.name,
+    });
+    const prepared = preferEditableElements(payload.document);
+    setDraft(prepared);
+    setFailed(Boolean(payload.recovered));
+    setMergeIds([]);
+    setView("side");
+    if (intent === "elements" && !payload.recovered) {
+      await commitDocument(prepared, "shapes");
+    }
+  }
+
   async function createDraftFromAsset(assetId: string, isStale?: () => boolean) {
     setError(null);
     setRunning(true);
     let activeJobId: string | null = null;
     try {
+      if (guest) {
+        const local = getGuestAsset(assetId);
+        if (!local) throw new Error("That image could not be found in this session.");
+        await createGuestDraftFromFile(new File([local.blob], local.name, { type: local.mimeType }), isStale);
+        return;
+      }
       // Clear any stuck/in-flight job so Edit elements is not blocked by a prior run.
       await cancelActiveReconstructions();
       if (isStale?.()) return;
@@ -202,18 +239,7 @@ export function ReconstructDialog({
     setRunning(true);
     try {
       if (guest) {
-        const asset = registerGuestAsset({
-          blob: file,
-          mimeType: file.type || "image/png",
-          width: size.width,
-          height: size.height,
-          name: file.name,
-        });
-        const next = buildGuestExactDocument(asset.id, size.width, size.height);
-        setDraft(next);
-        setFailed(false);
-        setMergeIds([]);
-        await commitDocument(next, "image");
+        await createGuestDraftFromFile(file);
         setRunning(false);
         return;
       }
@@ -892,49 +918,4 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 102.4) / 10} KB`;
   return `${Math.round(bytes / 104857.6) / 10} MB`;
-}
-
-function buildGuestExactDocument(assetId: string, width: number, height: number): ProjectDocument {
-  const layoutScale = Math.max(1, 256 / width, 256 / height);
-  const boardWidth = Math.max(256, Math.min(2048, Math.round(width * layoutScale)));
-  const boardHeight = Math.max(256, Math.min(2048, Math.round(height * layoutScale)));
-  const scale = boardWidth / width;
-  let preset: ProjectDocument["artboard"]["preset"] = "custom";
-  if (boardWidth === 1000 && boardHeight === 1000) preset = "square";
-  else if (boardWidth === 512 && boardHeight === 512) preset = "icon";
-  else if (boardWidth === 1600 && boardHeight === 800) preset = "horizontal";
-  else if (boardWidth === 800 && boardHeight === 1400) preset = "vertical";
-  return {
-    schemaVersion: 1,
-    artboard: {
-      preset,
-      width: boardWidth,
-      height: boardHeight,
-      background: "#ffffff",
-    },
-    objects: [
-      {
-        id: createObjectId(),
-        type: "image",
-        name: "Original",
-        x: 0,
-        y: 0,
-        width,
-        height,
-        scaleX: Number(scale.toFixed(4)),
-        scaleY: Number(scale.toFixed(4)),
-        angle: 0,
-        opacity: 1,
-        visible: true,
-        locked: false,
-        assetId,
-      },
-    ],
-    reconstruction: {
-      jobId: `guest_${assetId}`.slice(0, 80),
-      sourceAssetId: assetId,
-      note: "Your exact upload is on the artboard as Logo. Edit that same image.",
-      keepShapes: false,
-    },
-  };
 }

@@ -22,8 +22,12 @@ export function registerGuestAsset(input: {
   width: number;
   height: number;
   name?: string;
+  /** Reuse a server-issued guest id so draft assetIds match the local blob. */
+  id?: string;
 }) {
-  const id = `guest_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
+  const id = input.id ?? `guest_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
+  const existing = assets.get(id);
+  if (existing) URL.revokeObjectURL(existing.url);
   const url = URL.createObjectURL(input.blob);
   const asset: GuestAsset = {
     id,

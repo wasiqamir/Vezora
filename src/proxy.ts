@@ -13,6 +13,7 @@ const PUBLIC_PATH = [
   /^\/share\/[^/]+$/,
   /^\/api\/health$/,
   /^\/api\/auth(\/|$)/,
+  /^\/api\/reconstruction\/guest$/,
 ];
 
 export async function proxy(request: NextRequest) {
